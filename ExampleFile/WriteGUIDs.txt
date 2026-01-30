@@ -1,0 +1,170 @@
+#If VBA7 Then
+    Public Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As LongPtr) 'For 64 Bit Systems
+#Else
+    Public Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long) 'For 32 Bit Systems
+#End If
+
+Private Declare PtrSafe Function CoCreateGuid Lib "ole32.dll" (pGuid As GUID_TYPE) As Long
+
+Private Type GUID_TYPE
+    Data1 As Long
+    Data2 As Integer
+    Data3 As Integer
+    Data4(7) As Byte
+End Type
+
+Sub RunWriteGUIDs()
+
+    Dim ws As Worksheet
+    Dim rng As Range
+    Dim col As Long
+
+    Set ws = ThisWorkbook.Sheets("variable")
+    
+    ' Check if a column with the header "guid" already exists
+    Set rng = ws.Rows(1).Find("guid", LookIn:=xlValues, LookAt:=xlWhole)
+
+    If rng Is Nothing Then
+        ' guid column does not exist, so insert it after the "CUSTOM8" column
+        Set rng = ws.Rows(1).Find("CUSTOM8", LookIn:=xlValues, LookAt:=xlWhole)
+        If Not rng Is Nothing Then
+            col = rng.Column
+            ws.Columns(col + 1).Insert Shift:=xlToRight, CopyOrigin:=xlFormatFromLeftOrAbove
+            ws.Cells(1, col + 1).Value = "WRITEROLES"
+            ' Now run the WriteGUIDs function
+            WriteGUIDs
+        Else
+            MsgBox "Header 'CUSTOM8' not found"
+        End If
+        
+        Set rng = ws.Rows(1).Find("WRITEROLES", LookIn:=xlValues, LookAt:=xlWhole)
+        If Not rng Is Nothing Then
+            col = rng.Column
+            ws.Columns(col + 1).Insert Shift:=xlToRight, CopyOrigin:=xlFormatFromLeftOrAbove
+            ws.Cells(1, col + 1).Value = "GUID"
+        Else
+            MsgBox "Header 'CUSTOM8' not found"
+        End If
+    End If
+    
+    ' Now run the WriteGUIDs function
+    WriteGUIDs
+
+
+End Sub
+
+Function CreateGuidNew() As String
+    Dim id As GUID_TYPE
+    CoCreateGuid id
+
+    CreateGuidNew = LCase(Right$("00000000" & hex$(id.Data1), 8) & "-" & _
+        Right$("0000" & hex$(id.Data2), 4) & "-" & _
+        Right$("0000" & hex$(id.Data3), 4) & "-" & _
+        Right$("0000" & Hex2$(id.Data4(0), id.Data4(1)), 4) & "-" & _
+        Right$("000000000000" & Hex2$(id.Data4(2), id.Data4(3)) & Hex2$(id.Data4(4), id.Data4(5)) & Hex2$(id.Data4(6), id.Data4(7)), 12))
+End Function
+
+Function Hex2(low As Byte, high As Byte) As String
+    Hex2 = Right$("00" & hex$(high), 2) & Right$("00" & hex$(low), 2)
+End Function
+
+
+Function WriteGUIDs()
+    Dim ws, ws_temp As Worksheet
+    Dim rng As Range
+    Dim guidCol As Long
+    Dim i As Long
+    Dim GUID As String
+    Dim RowCount As Integer
+    Dim lastRow As Integer
+    
+    Set ws = ThisWorkbook.Sheets("variable")
+    Set ws_temp = ThisWorkbook.Sheets("variable_temp")
+
+    ' Find the column with the header "guid"
+    Set rng = ws.Rows(1).Find("guid", LookIn:=xlValues, LookAt:=xlWhole)
+
+    If rng Is Nothing Then
+        MsgBox "Column 'guid' does not exist."
+    Else
+        guidCol = rng.Column
+        lastRow = GetRowCount()
+        
+        ' Declare an array without specifying its size
+        Dim GUID_Array() As String
+        Dim Empty_Array() As String
+        ' Resize the array
+        ReDim GUID_Array(1 To lastRow - 1)
+        ReDim Empty_Array(1 To lastRow - 1)
+
+        ' Fill your array
+        For i = 1 To lastRow - 1
+            GUID_Array(i) = CreateGuidNew()
+            Empty_Array(i) = ""
+        Next i
+        
+        
+        
+        ' Write your array to the cells from guidCol row 2 to guidCol lastRow
+        ws.Range(ws.Cells(2, guidCol), ws.Cells(lastRow, guidCol)).Value = Application.Transpose(GUID_Array)
+        ws_temp.Range(ws_temp.Cells(2, guidCol), ws_temp.Cells(lastRow, guidCol)).Value = Application.Transpose(GUID_Array)
+        ws.Range(ws.Cells(2, guidCol - 1), ws.Cells(lastRow, guidCol - 1)).Value = Application.Transpose(Empty_Array)
+        ws_temp.Range(ws_temp.Cells(2, guidCol - 1), ws_temp.Cells(lastRow, guidCol - 1)).Value = Application.Transpose(Empty_Array)
+
+
+        ' Loop from row 2 to the last row in column A
+        'For i = 2 To GetRowCount()
+        '    GUID = CreateGUID()
+        '    ws.Cells(i, guidCol).Value = GUID
+        '    ws.Cells(i, guidCol - 1).Value = ""
+        '    ws_temp.Cells(i, guidCol).Value = GUID
+        '    ws_temp.Cells(i, guidCol - 1).Value = ""
+        'Next i
+
+    End If
+End Function
+
+Function FormatText(inputText As String) As String
+    Dim outputText As String
+    Dim i As Integer
+    
+    outputText = inputText
+    
+    ' Add space before capital letters
+    For i = 2 To Len(outputText)
+        If Asc(Mid(outputText, i, 1)) >= 65 And Asc(Mid(outputText, i, 1)) <= 90 Then
+            outputText = Left(outputText, i - 1) & " " & Mid(outputText, i)
+            i = i + 1 ' Adjust index to account for the added space
+        End If
+    Next i
+    
+    ' Replace underscores with spaces
+    outputText = Replace(outputText, "_", " ")
+    
+    ' Replace consecutive spaces with a single space
+    Do While InStr(outputText, "  ") > 0
+        outputText = Replace(outputText, "  ", " ")
+    Loop
+    
+    FormatText = outputText
+End Function
+
+
+
+
+Function GetRowCount() As Long
+
+    Dim ws As Worksheet
+
+    Set ws = ThisWorkbook.Sheets("variable")
+    GetRowCount = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+
+End Function
+
+
+
+
+
+
+
+

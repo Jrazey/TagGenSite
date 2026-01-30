@@ -1,0 +1,24 @@
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Javascript / Node
+node_modules/
+dist/
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Local DBFs (Don't commit actual project data usually, but maybe example files are ok? User's call. Excluding root DBFs just in case)
+*.DBF
+*.dbf
+*.bak
+
+# Artifacts
+.gemini/

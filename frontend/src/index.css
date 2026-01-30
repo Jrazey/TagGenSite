@@ -1,0 +1,110 @@
+
+:root {
+  --bg-primary: #121212;
+  --bg-secondary: #1E1E1E;
+  --bg-tertiary: #2C2C2C;
+  --text-primary: #E0E0E0;
+  --text-secondary: #B0B0B0;
+  --accent-color: #007ACC;
+  --accent-hover: #005F9E;
+  --border-color: #333333;
+  --success-color: #4CAF50;
+  --warning-color: #FFC107;
+  --danger-color: #F44336;
+  
+  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* High Density Grid */
+.tag-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem; /* Compact font */
+}
+
+.tag-grid th, .tag-grid td {
+  border: 1px solid var(--border-color);
+  padding: var(--spacing-xs) var(--spacing-sm); /* Minimal padding */
+  text-align: left;
+}
+
+.tag-grid th {
+  background-color: var(--bg-tertiary);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.tag-grid tr:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.tag-grid input {
+  background: transparent;
+  border: 1px solid transparent;
+  color: inherit;
+  width: 100%;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.tag-grid input:focus {
+  border-color: var(--accent-color);
+  outline: none;
+  background-color: var(--bg-primary);
+}
+
+/* Glassmorphism Header */
+header {
+  background: rgba(30, 30, 30, 0.8);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-color);
+  padding: var(--spacing-sm) var(--spacing-md);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+button {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+button:hover {
+  background-color: var(--bg-secondary);
+  border-color: var(--text-secondary);
+}
+
+button.primary {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: white;
+}
+
+button.primary:hover {
+  background-color: var(--accent-hover);
+}

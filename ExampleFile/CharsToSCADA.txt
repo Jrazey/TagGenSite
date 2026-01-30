@@ -1,0 +1,52 @@
+Function ConvertNonAlphaNumToHex(inputString As String) As String
+    Dim i As Integer
+    Dim outputString As String
+    Dim char As String
+    Dim asciiVal As Integer
+    Dim symbols As String
+    
+    outputString = ""
+    symbols = "/" ' add any other symbols you want to keep as they are
+    
+    For i = 1 To Len(inputString)
+        char = Mid(inputString, i, 1)
+        asciiVal = Asc(char)
+        
+        If (asciiVal >= 48 And asciiVal <= 57) Or _
+           (asciiVal >= 65 And asciiVal <= 90) Or _
+           (asciiVal >= 97 And asciiVal <= 122) Or _
+           (InStr(symbols, char) > 0) Then
+            outputString = outputString & char
+        Else
+            outputString = outputString & "^0x" & WorksheetFunction.Dec2Hex(asciiVal, 2)
+        End If
+    Next i
+    
+    ConvertNonAlphaNumToHex = outputString
+End Function
+
+
+Function HexToChar(hex As String) As String
+    Dim code As Integer
+    code = Application.WorksheetFunction.Hex2Dec(hex)
+    
+    If code >= 0 And code <= 255 Then
+        HexToChar = Chr(code)
+    Else
+        HexToChar = ""
+    End If
+End Function
+
+Function DecimalToHex(dec As String) As String
+    Dim num As Double
+    num = Val(dec)
+    
+    If num >= 0 And num <= 255 Then
+        DecimalToHex = Right("0" & hex(num), 2)
+    Else
+        DecimalToHex = ""
+    End If
+End Function
+
+
+

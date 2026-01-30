@@ -1,0 +1,297 @@
+Sub ExtractControllerTags()
+    Dim sFile As String
+    Dim sLine As String
+    Dim dCount As Double
+    Dim dSearch As String
+    
+    Dim rSearch As Range
+    Dim rResult As Range
+    
+    Dim iProgress As Integer
+    Dim iTotal As Integer
+
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets("Config")  ' adjust the sheet name as needed
+
+    Dim sL5K_Location As String
+    sL5K_Location = ws.Range("B19").Value   ' adjust the cell reference as needed
+    
+    
+    ' Check if the cell is empty
+    If sL5K_Location = "" Then
+        ' If the cell is empty, show a message box
+        MsgBox "No L5K file found"
+    Else
+        ' Check if controller tags sheet is in tag gen and if it's not, create it.
+        CheckAndCreateSheet
+        
+        ' Extract controller tags
+        ExtractTags (sL5K_Location)
+        
+    End If
+        
+
+End Sub
+
+
+
+Sub ExtractTags(filePath As String)
+    Dim TagNames() As String
+    Dim TagTypes() As String
+    Dim TagDescs() As String
+    Dim TempArrayNameandType() As String
+    Dim TempArrayDesc1() As String
+    Dim TempArrayDesc2() As String
+    
+    On Error GoTo ErrorHandler
+
+    ' Check if the file exists
+    If Dir(filePath) = "" Then
+        MsgBox "File not found: " & filePath
+        Exit Sub
+    End If
+
+    ' Open the L5K file
+    Dim fileContent As String
+    Dim fileNumber As Integer
+    fileNumber = FreeFile
+    Open filePath For Input As fileNumber
+    fileContent = Input$(LOF(fileNumber), fileNumber)
+    Close fileNumber
+
+    ' Find Tag block
+    Dim tagStringRaw As String
+    tagStringRaw = GetSubstringBetweenWords(fileContent, vbTab & "TAG", "END_TAG")
+    
+    ' Delimit tags in tag block using ;
+    Dim TagStringRawArr() As String
+    Dim TagNameAndTypeStringRawArr() As String
+    
+    TagStringRawArr = SplitString(tagStringRaw, ";")
+    TagNameAndTypeStringRawArr = SplitString(tagStringRaw, ";")
+    
+    ' We now know roughly how many tags there are so we are going to resize the arrays
+     ReDim TagNames(0 To UBound(TagStringRawArr))
+     ReDim TagTypes(0 To UBound(TagStringRawArr))
+     ReDim TagDescs(0 To UBound(TagStringRawArr))
+        
+    ' Set the worksheet object
+    Set ws = ThisWorkbook.Sheets("ControllerTags")
+    
+    
+    
+    ' Loop over the array using a For loop
+    For i = LBound(TagStringRawArr) To UBound(TagStringRawArr)
+        ' Get the Tag name and type
+        TagNameAndTypeStringRawArr(i) = RemoveSubstringBetweenChars(TagNameAndTypeStringRawArr(i), "(", ")")
+        TagNameAndTypeStringRawArr(i) = RemoveSubstring(TagNameAndTypeStringRawArr(i), ":=")
+        
+        TagStringRawArr(i) = GetSubstringBetweenWords(TagStringRawArr(i), "(", ")")
+        
+        ' Check if the delimiter (":") exists in the TagNameAndTypeStringRawArr(i)
+        If InStr(TagNameAndTypeStringRawArr(i), ":") > 0 Then
+            ' Split Tagname and type into string array
+            TempArrayNameandType = Split(TagNameAndTypeStringRawArr(i), ":")
+             If Not InStr(1, TempArrayNameandType(0), " OF ", vbTextCompare) > 0 Then
+                ' Write TagName to sheet
+                ws.Cells(i + 2, "A").Value = TempArrayNameandType(0)
+                ' Write Datatype to sheet
+                ws.Cells(i + 2, "B").Value = TempArrayNameandType(1)
+                
+                If InStr(TagStringRawArr(i), "Description") > 0 Then
+                    ' Contains "Description'
+                    ' Delimit using comma
+                    TempArrayDesc1 = Split(TagStringRawArr(i), ",")
+                    ' delimit using " := "
+                    TempArrayDesc2 = Split(TempArrayDesc1(0), " := ")
+                    ' Remove quotation marks
+                    TempArrayDesc2(1) = Replace(TempArrayDesc2(1), """", "")
+                    ' Write description to sheet
+                    ws.Cells(i + 2, "C").Value = TempArrayDesc2(1)
+                End If
+            End If
+        End If
+    Next i
+    
+    ' Cleans up empty rows
+    DeleteEmptyRows
+    
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "Error: " & Err.Description
+
+End Sub
+
+
+
+Sub CheckAndCreateSheet()
+
+    Dim ws As Worksheet
+    Dim sheetExists As Boolean
+    sheetExists = False
+
+    ' Loop through each sheet in the workbook
+    For Each ws In ThisWorkbook.Sheets
+        ' If a sheet named "ControllerTags" is found, set sheetExists to True
+        If ws.Name = "ControllerTags" Then
+            sheetExists = True
+            Exit For
+        End If
+    Next ws
+
+    ' If no sheet named "ControllerTags" is found, create one
+    If sheetExists = False Then
+        Set ws = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+        ws.Name = "ControllerTags"
+    End If
+    
+    ' Set the worksheet object
+    Set ws = ThisWorkbook.Sheets("ControllerTags")
+    
+    ' Clear all tags
+    ws.UsedRange.ClearContents
+    
+    ' Write headers
+    ws.Cells(1, "A").Value = "TagName"
+    ws.Cells(1, "B").Value = "DataType"
+    ws.Cells(1, "C").Value = "Description"
+    
+    ' Make Headers Bold
+     ws.Rows(1).Font.Bold = True
+     
+     ' Make headers filterable
+     ws.Range("A1:" & ws.Cells(1, 3).Address).AutoFilter
+     
+     ' Move the worksheet
+     ' Set the worksheet objects
+     Set ws = ThisWorkbook.Sheets("ControllerTags")
+     Set configSheet = ThisWorkbook.Sheets("Config")
+        
+     ' Move the "ControllerTags" sheet next to the "Config" sheet
+     ws.Move After:=configSheet
+
+End Sub
+
+
+Function GetSubstringBetweenWords(ByVal inputString As String, ByVal word1 As String, ByVal word2 As String) As String
+    ' Find the position of the first occurrence of word1 in the inputString
+    Dim startPosition As Long
+    startPosition = InStr(1, inputString, word1)
+    
+    ' If word1 is found
+    If startPosition > 0 Then
+        ' Set the starting position to the character right after the word1
+        startPosition = startPosition + Len(word1)
+        
+        ' Find the position of the first occurrence of word2 after startPosition
+        Dim endPosition As Long
+        endPosition = InStr(startPosition, inputString, word2)
+        
+        ' If word2 is found after word1
+        If endPosition > startPosition Then
+            ' Extract the substring between word1 and word2
+            Dim result As String
+            result = Mid(inputString, startPosition, endPosition - startPosition)
+            
+            ' Remove repeated white spaces and replace them with a single white space
+            Dim regex As Object
+            Set regex = CreateObject("VBScript.RegExp")
+            regex.Pattern = "\s+"
+            regex.Global = True
+            result = regex.Replace(result, " ")
+            
+            ' Return the modified substring
+            GetSubstringBetweenWords = result
+        End If
+    End If
+End Function
+
+
+
+Function SplitString(ByVal inputString As String, ByVal delimiter As String) As String()
+    Dim result() As String
+    
+    ' Split the inputString into an array based on the delimiter
+    result = Split(inputString, delimiter)
+    
+    ' Return the resulting array
+    SplitString = result
+End Function
+
+Function RemoveSubstringBetweenChars(ByVal inputString As String, ByVal char1 As String, ByVal char2 As String) As String
+    Dim startPosition As Long
+    Dim endPosition As Long
+    Dim tempString As String
+    
+    tempString = inputString
+    
+    ' Find the positions of char1 and char2 in the inputString
+    startPosition = InStr(1, tempString, char1)
+    endPosition = InStr(1, tempString, char2)
+    
+    ' Loop until both char1 and char2 are not found
+    Do While startPosition > 0 And endPosition > 0
+        ' Remove the substring between char1 and char2, including the characters themselves
+        tempString = Left(tempString, startPosition - 1) & Mid(tempString, endPosition + Len(char2))
+        
+        ' Find the positions of char1 and char2 in the updated tempString
+        startPosition = InStr(1, tempString, char1)
+        endPosition = InStr(1, tempString, char2)
+    Loop
+    
+    ' Return the updated tempString
+    RemoveSubstringBetweenChars = tempString
+End Function
+
+
+Function RemoveSubstring(ByVal inputString As String, ByVal substring As String) As String
+    ' Find the position of the substring in the inputString
+    Dim position As Long
+    position = InStr(1, inputString, substring)
+    
+    ' If the substring is found
+    If position > 0 Then
+        ' Remove all characters after and including the substring
+        RemoveSubstring = Trim(Left(inputString, position - 1))
+    Else
+        ' Return the original inputString if the substring is not found
+        RemoveSubstring = inputString
+    End If
+End Function
+
+
+Sub ReplaceBlankStrings(ByRef inputArray() As String)
+    Dim i As Integer
+
+    ' Loop over the inputArray and replace blank strings with a space
+    For i = LBound(inputArray) To UBound(inputArray)
+        If inputArray(i) = "" Then
+            inputArray(i) = " "
+        End If
+    Next i
+End Sub
+
+Sub DeleteEmptyRows()
+    Dim ws As Worksheet
+    Dim lastRow As Long
+    Dim i As Long
+    
+    ' Set the worksheet object
+    Set ws = ThisWorkbook.Sheets("ControllerTags")
+    
+    ' Determine the last row in column A with data
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    
+    ' Loop through each row from the last row to the second row
+    For i = lastRow To 2 Step -1
+        ' Check if the row is empty
+        If WorksheetFunction.CountA(ws.Rows(i)) = 0 Then
+            ' Delete the empty row
+            ws.Rows(i).Delete
+        End If
+    Next i
+End Sub
+
+
+

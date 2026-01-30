@@ -1,0 +1,980 @@
+'************************************************************************************************************************
+'
+'       EEHA Tag Generator
+'
+'       v0.1    AGW         13/09/2019      Original Version
+'       v0.2    AGW         06/11/2020      Added override, write to DBF, general features
+'       v0.3    ZH
+'
+'       Through decent trial and error on a ~1mil tag project, I found the fastest way was to;
+'           * Copy full UDT ranges (digalm and trend to _temp sheets), using rPaste_Range.Value = rCopy_Range.Value
+'           * Filter _temp sheets for <>"", then copy to actual sheets (deleting rows takes ages)
+'
+'       The biggest performance cost is assigning the named ranges. This has been retained as it makes
+'       the template much more workable.
+'
+'************************************************************************************************************************
+
+'   References
+'
+'   https://www.ozgrid.com/VBA/SpeedingUpVBACode.htm
+'
+'       Sheet1.Range("A1:A200").Copy Destination:=Sheet2.Range("B1")        'Bypasses the clipboard
+'       Sheet2.Range("B1:B200").Value = Sheet1.Range("A1:A200").Value       'Values only - this is the quickest
+'       Sheet2.Range("B1:B200").Formula = Sheet1.Range("A1:A200").Formula   'Will do formulas and formatting
+
+
+Option Explicit 'Take pride in your work
+Sub GenerateAndWrite_Tags()
+    Generate_Tags
+    WriteToDBFs
+
+End Sub
+
+
+
+Sub Generate_Tags()
+
+    Dim sDL As String
+    Dim sCurrentUDT As String
+    Dim sRangeName As String
+    
+    Dim rDL_Header As Range
+    Dim rDL_Contents As Range
+    Dim rRow As Range
+    Dim rRange As Range
+    Dim rFilter As Range
+    Dim rCell As Range
+    Dim rHeader As Range
+    
+    Dim iNumOfDevices As Integer
+    Dim iCurrentDevice As Integer
+    Dim iCurrentUDT_NumOfTags As Integer
+    
+    Dim lOffset As Long
+    Dim dStartTime As Double
+    Dim dDeviceStartTime As Double
+    
+    dStartTime = Timer
+    Application.ScreenUpdating = False
+    Application.Calculation = xlManual
+    
+    ' Save File before changing stuff
+    SaveCopyToDir ("\\10.10.10.2\EEHA Automation\25. User\jsmith\MassTagGenBackup")
+    
+    'Get config
+    sDL = Range("Config_Active_DL").Value
+   
+    'Clear all output sheets + remove all borders
+    Clear_Outputs False
+    
+    'Remove all filters from all sheets
+    RemoveAllFilters
+    
+    'Set the DL contents range
+    Set rDL_Header = Sheets(sDL).Range("DL_Header")
+    Set rDL_Contents = Range(rDL_Header.Offset(1, 0), rDL_Header.Offset(rDL_Header.Cells(1, 7).End(xlDown).Row - rDL_Header.Row, 0))     'Take 'UDT' column for xlDown incase disabled.
+    iNumOfDevices = rDL_Contents.Rows.Count
+        
+    For Each rRow In rDL_Contents.Rows
+    
+        'Start device timer
+        dDeviceStartTime = Timer
+        
+        'Show applicaton status
+        iCurrentDevice = rRow.Row - rDL_Contents.Row
+        Application.StatusBar = Format(iCurrentDevice / iNumOfDevices, "Percent") & " Complete (" & iCurrentDevice & "/" & iNumOfDevices & ")"
+        
+        'Clear tag number totals
+        rRow.Cells(1, 1) = 0                        'Number of variable tags
+        rRow.Cells(1, 2) = 0                        'Number of digalm tags
+        rRow.Cells(1, 3) = 0                        'Number of trend tags
+        rRow.Cells(1, 4) = 0                        'Number of PV tags
+        rRow.Cells(1, 5) = 0                        'Number of PV alarms
+        rRow.Cells(1, 6) = 0                        'Time
+        
+        'If enabled
+        If rRow.Cells(1, 7).Value Then              'Enabled
+               
+            'Get current UDT
+            sCurrentUDT = rRow.Cells(1, 8).Value    'UDT type
+            
+            'Set named ranges based off headings from DL.
+            For Each rCell In rRow.Cells
+                'Ignore first columns
+                If (rCell.Column - rRow.Cells(1).Column) >= 8 Then
+                    Set rHeader = rDL_Header.Cells(1, rCell.Column - rRow.Cells(1).Column + 1)
+                    
+                    'Check if Range is enabled.
+                    If rHeader.Offset(-2, 0).Value = True Then
+                        sRangeName = "DL_" & rHeader.Value
+                        '$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+                        'THIS is the biggest performance killer
+                        rCell.Name = sRangeName
+                        'Below takes the same time.
+                        'ThisWorkbook.Names(sRangeName).RefersTo = "=" & sDL & "!" & rCell.Address
+                        '$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+                    
+                    End If
+                End If
+            Next rCell
+            
+            'Check if sheet exists for UDT
+            On Error Resume Next
+            If Worksheets(sCurrentUDT).Name = "" Then
+                MsgBox ("Worksheet does not exist for " & sCurrentUDT & ".")
+                Exit Sub
+            End If
+            On Error GoTo 0
+            
+            'Determine number of tags for UDT
+            If Worksheets(sCurrentUDT).Range("UDT_Main_Header").Offset(1, 0).Cells(1).Value = "" Then
+                MsgBox ("Error; There are tags for UDT: " & sCurrentUDT)
+                Exit Sub
+            Else
+                iCurrentUDT_NumOfTags = Worksheets(sCurrentUDT).Range("UDT_Main_Header").End(xlDown).Row - Worksheets(sCurrentUDT).Range("UDT_Main_Header").Row
+            End If
+            
+            'Calculate sheet
+            Worksheets(sCurrentUDT).Calculate
+            
+            'Copy variable, digalm and trend from UDT to output. Returns number of tags
+            rRow.Cells(1, 1) = CopyUDTValues("variable", sCurrentUDT, lOffset, iCurrentUDT_NumOfTags)
+            rRow.Cells(1, 2) = CopyUDTValues("digalm", sCurrentUDT, lOffset, iCurrentUDT_NumOfTags)
+            rRow.Cells(1, 3) = CopyUDTValues("trend", sCurrentUDT, lOffset, iCurrentUDT_NumOfTags)
+            If Range("Config_EnablePanelview").Value = True Then
+                'Average way to count the number of panelview alarms. XML_Trigger is the 30th column
+                rRow.Cells(1, 4) = CopyUDTValues("PV", sCurrentUDT, lOffset, iCurrentUDT_NumOfTags)
+                rRow.Cells(1, 5) = WorksheetFunction.CountIf(Range(Range("PV_temp_Header").Offset(lOffset + 1, 0), Range("PV_temp_Header").Offset(lOffset + iCurrentUDT_NumOfTags, 0)).Columns(30), "*?")
+            End If
+            
+            'Set device time
+            rRow.Cells(1, 6) = Timer - dDeviceStartTime
+            
+            'Increment lOffset
+            lOffset = lOffset + iCurrentUDT_NumOfTags
+            
+        End If
+    Next rRow
+    
+    'Filter and copy variable values
+    Application.StatusBar = "Filtering empty variable."
+    Set rFilter = Range(Range("variable_temp_Header"), Sheets("variable_temp").Range("A1048576").End(xlUp))
+    rFilter.AutoFilter Field:=1, Criteria1:="<>"
+    rFilter.SpecialCells(xlCellTypeVisible).Copy Destination:=Range("variable_header")
+    Sheets("variable_temp").AutoFilterMode = False
+    
+    'Filter and copy digalm values
+    Application.StatusBar = "Filtering empty digalms."
+    Set rFilter = Range(Range("digalm_temp_Header"), Sheets("digalm_temp").Range("A1048576").End(xlUp))
+    rFilter.AutoFilter Field:=1, Criteria1:="<>"
+    rFilter.SpecialCells(xlCellTypeVisible).Copy Destination:=Range("digalm_header")
+    Sheets("digalm_temp").AutoFilterMode = False
+    
+    'Filter and copy trend values
+    Application.StatusBar = "Filtering empty trends."
+    Set rFilter = Range(Range("trend_temp_Header"), Sheets("trend_temp").Range("A1048576").End(xlUp))
+    rFilter.AutoFilter Field:=1, Criteria1:="<>"
+    rFilter.SpecialCells(xlCellTypeVisible).Copy Destination:=Range("trend_header")
+    Sheets("trend_temp").AutoFilterMode = False
+    
+    'Filter and copy PV values
+    Application.StatusBar = "Filtering empty PV."
+    Set rFilter = Range(Range("PV_temp_Header"), Sheets("PV_temp").Range("A1048576").End(xlUp))
+    rFilter.AutoFilter Field:=1, Criteria1:="<>"
+    rFilter.SpecialCells(xlCellTypeVisible).Copy Destination:=Range("PV_header")
+    Sheets("PV_temp").AutoFilterMode = False
+    
+    'Process Overrides
+    If Range("Config_EnableOverride").Value = True Then
+        ProcessOverrides ("variable")
+        ProcessOverrides ("digalm")
+        ProcessOverrides ("trend")
+        If Range("Config_EnablePanelview").Value = True Then
+            ProcessOverrides ("PV")
+        End If
+    End If
+    
+    'Autofit cols
+    Application.StatusBar = "Autofit columns."
+    Sheets("variable").Range("A:AZ").Columns.AutoFit
+    Sheets("digalm").Range("A:AZ").Columns.AutoFit
+    Sheets("trend").Range("A:AZ").Columns.AutoFit
+    Sheets("PV").Range("A:AZ").Columns.AutoFit
+    
+    'Check column lengths + highlight or msgbox?
+    'Check duplicates
+    
+    'If PV is enabled and something exists in PV sheet
+    If Range("Config_EnablePanelview").Value = True And Range("PV_Header").End(xlDown).Row <> 1048576 Then
+        
+        'Populate PV_CSV
+        Application.StatusBar = "Populate PV_CSV"
+        
+        'Insert Folders into PV_CSV
+        Set rRange = Range(Range("PV_Header").Cells(Range("PV_Header").Cells.Count).Offset(1, 0), Range("PV_Header").Cells(Range("PV_Header").Cells.Count).End(xlDown))
+        rRange.Offset(0, 1).Value = rRange.Value
+        Set rRange = rRange.Offset(0, 1)
+        rRange.RemoveDuplicates Columns:=Array(1), Header:=xlNo
+        Set rRange = Range(rRange.Cells(1), rRange.Cells(1).End(xlDown))
+        
+        For Each rCell In rRange.Cells
+            Range("PV_CSV_Folder_Preamble").Offset(1).EntireRow.Insert
+            Range("PV_CSV_Folder_Preamble").Offset(1, 0).Value = "F"
+            Range("PV_CSV_Folder_Preamble").Offset(1, 1).Value = rCell.Value
+            Range("PV_CSV_Folder_Preamble").Offset(1, 2).Value = "F"
+        Next rCell
+        
+        'Copy CSV tags
+        Range(Range("PV_CSV_Copy").Offset(1), Range("PV_CSV_Copy").End(xlDown)).Copy Destination:=Range("PV_CSV_Tag_Preamble").Offset(1)
+        
+        'Populate PV_XML
+        Application.StatusBar = "Populate PV_XML"
+        'Iterate through PV, replace ~Num~ and insert into XML
+        Set rRange = Range(Range("PV_Header").Offset(1), Range("PV_Header").End(xlDown))
+        lOffset = 1
+        For Each rRow In rRange.Rows
+            If rRow.Cells(1, 1) <> "" And rRow.Cells(1, Range("PV_XML_Triggers_Copy").Column) <> "" And rRow.Cells(1, Range("PV_XML_Messages_Copy").Column) <> "" Then
+                Range("PV_XML_Triggers_End").EntireRow.Insert
+                Range("PV_XML_Triggers_End").Offset(-1).Value = Replace(rRow.Cells(1, Range("PV_XML_Triggers_Copy").Column), "~Num~", Right(Str(lOffset), Len(Str(lOffset)) - 1))   'for some reason Str() pads with a leading " "
+                Range("PV_XML_Messages_End").EntireRow.Insert
+                Range("PV_XML_Messages_End").Offset(-1).Value = Replace(rRow.Cells(1, Range("PV_XML_Messages_Copy").Column), "~Num~", Right(Str(lOffset), Len(Str(lOffset)) - 1))
+                lOffset = lOffset + 1
+            End If
+        Next rRow
+
+
+        'Export CSV
+        Application.StatusBar = "Export PV_CSV"
+        Dim CurrentWB As Workbook
+        Dim TempWB As Workbook
+        Dim sPath As String
+        
+        sPath = Range("Config_CSV_Path").Value
+        Set CurrentWB = ActiveWorkbook
+        ActiveWorkbook.Sheets("PV_CSV").UsedRange.Copy
+        Set TempWB = Application.Workbooks.Add(1)
+        With TempWB.Sheets(1).Range("A1")
+          .PasteSpecial xlPasteValues
+          .PasteSpecial xlPasteFormats
+        End With
+         
+        Application.DisplayAlerts = False
+        TempWB.SaveAs fileName:=sPath, FileFormat:=xlCSV, CreateBackup:=False, Local:=True
+        TempWB.Close SaveChanges:=False
+        Application.DisplayAlerts = True
+        
+        'Export XML
+        Application.StatusBar = "Export PV_XML"
+        CurrentWB.Activate
+        Call ExportTxt(Range("Config_XML_Path").Value, "PV_XML", 1)
+        
+    End If
+    
+    'Set named ranges back to default values (defined in the hidden row above above DL_Header)
+    For Each rCell In rDL_Header.Cells
+        'Ignore variable, digalm, trend and enabled.
+        If (rCell.Column - rDL_Header.Cells(1).Column) >= 6 Then
+            sRangeName = "DL_" & rDL_Header.Cells(1, rCell.Column - rDL_Header.Cells(1).Column + 1).Value
+            rCell.Offset(-1).Name = sRangeName
+        End If
+    Next rCell
+
+    Application.ScreenUpdating = True
+    Application.Calculation = xlAutomatic
+    
+    Application.StatusBar = "Generating GUIDs"
+    RunWriteGUIDs
+    
+    'ReplaceSquareBrackets
+    
+    'MsgBox ("Tag generation completed in " & Format(Timer - dStartTime, "00.00") & " seconds")
+    Application.StatusBar = "Tag generation completed in " & Format(Timer - dStartTime, "00.00") & " seconds"
+    
+    
+
+End Sub
+
+
+Sub ReplaceSquareBrackets()
+
+    Dim ws As Worksheet
+    Dim i As Integer
+    Set ws = ThisWorkbook.Sheets("variable")
+    
+    Dim colNum As Long
+    colNum = 0
+    
+    'Find column with header "ADDR"
+    For i = 1 To ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+        If ws.Cells(1, i).Value = "ADDR" Then
+            colNum = i
+            Exit For
+        End If
+    Next i
+    
+    If colNum = 0 Then
+        MsgBox "ADDR column not found"
+        Exit Sub
+    End If
+    
+    'Set the range to operate on
+    Dim rng As Range
+    Set rng = ws.Range(ws.Cells(2, colNum), ws.Cells(ws.Rows.Count, colNum).End(xlUp))
+    
+    'Turn off screen updating and automatic calculation for performance
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    
+    'Replace "]." with "}/", "[" with "{", and "]" with "}"
+    rng.Replace What:="].", Replacement:="}/", LookAt:=xlPart, MatchCase:=False
+    rng.Replace What:="[", Replacement:="{", LookAt:=xlPart, MatchCase:=False
+    rng.Replace What:="]", Replacement:="}", LookAt:=xlPart, MatchCase:=False
+    
+    'Turn on screen updating and automatic calculation
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    
+End Sub
+
+
+
+Function CopyUDTValues(sDBF As String, sCurrentUDT As String, lOffset As Long, iCurrentUDT_NumOfTags As Integer) As Integer
+
+    Dim rCopy_Header As Range
+    Dim rCopy_Range As Range
+    Dim rPaste_Header As Range
+    Dim rPaste_Range As Range
+    Dim rLastNonEmpty As Range
+
+    'Set copy range
+    Set rCopy_Header = Sheets(sCurrentUDT).Range("UDT_" & sDBF & "_Header")
+    Set rCopy_Range = Range(rCopy_Header.Offset(1, 0), rCopy_Header.Offset(iCurrentUDT_NumOfTags, 0))
+    
+    'Set paste range
+    Set rPaste_Header = Range(sDBF & "_temp_Header")
+    Set rPaste_Range = Range(rPaste_Header.Offset(lOffset + 1, 0), rPaste_Header.Offset(lOffset + iCurrentUDT_NumOfTags, 0))
+    
+    'Copy
+    rPaste_Range.Value = rCopy_Range.Value  'As only values are required, this is quicker than using 'Range.Copy Destination:= xxxxx'
+    
+    'If borders are enabled, set border
+    If Range("Config_DisplayBorders").Value Then
+        'To get the borders displaying correctly once filtered, instead of rPaste_Range.Borders(xlEdgeBottom).LineStyle = xlContinuous
+        'the border is applied to row of the End(xlUp) of the bottom row of the range
+        'This does not have to be called on variable, but peformance increase tested as negligable
+        Set rLastNonEmpty = rPaste_Range.Cells(1).Offset(rPaste_Range.Rows.Count, 0).End(xlUp)
+        Range(rLastNonEmpty, rLastNonEmpty.Offset(0, rPaste_Range.Columns.Count - 1)).Borders(xlEdgeBottom).LineStyle = xlContinuous
+    End If
+    
+    'Return number of tags
+    CopyUDTValues = WorksheetFunction.CountIf(rPaste_Range.Columns(1), "*?")
+
+End Function
+
+
+
+Function ProcessOverrides(sDBF As String)
+
+    Dim sOverrideHeader As String
+    Dim sOutputHeader As String
+    
+    Dim rOverrideHeader As Range
+    Dim rOverrideContents As Range
+    Dim rOverrideRow As Range
+    Dim rOutputHeader As Range
+    Dim rOutputContents As Range
+    Dim rOutputRow As Range
+
+    Dim sTagName As String
+    Dim rFindResult As Range
+    Dim rCell As Range
+    
+    Dim iNumColumnsOtherThanTag As Integer
+    
+    Application.StatusBar = "Processing " & sDBF & "_Override"
+    sOverrideHeader = sDBF & "_Override_Header"
+    sOutputHeader = sDBF & "_Header"
+    
+    'Set the Override and Output contents range
+    Set rOverrideHeader = Range(sOverrideHeader)
+    Set rOutputHeader = Range(sOutputHeader)
+    If sDBF = "PV" Then                 'Need to offset 1 to the right for PV as the tag is contained in the 2nd column
+        Set rOverrideContents = Range(rOverrideHeader.Offset(1, 0), rOverrideHeader.Offset(rOverrideHeader.Offset(0, 1).End(xlDown).Row - rOverrideHeader.Row, 0))
+    Else
+        Set rOverrideContents = Range(rOverrideHeader.Offset(1, 0), rOverrideHeader.Offset(rOverrideHeader.End(xlDown).Row - rOverrideHeader.Row, 0))
+    End If
+    Set rOutputContents = Range(rOutputHeader.Offset(1, 0), rOutputHeader.Offset(rOutputHeader.End(xlDown).Row - rOutputHeader.Row, 0))
+    
+    'If there are records in Output and Overrride
+    If WorksheetFunction.CountIf(rOverrideHeader.Offset(1, 0), "*?") > 0 And WorksheetFunction.CountIf(rOutputHeader.Offset(1, 0), "*?") > 0 Then
+        For Each rOverrideRow In rOverrideContents.Rows
+            
+            'Use Tag Name as identifier, try and find in Output sheet
+            If sDBF = "PV" Then
+                sTagName = rOverrideRow.Cells(1, 2)
+                Set rFindResult = rOutputContents.Columns(2).Find(sTagName)
+            Else
+                sTagName = rOverrideRow.Cells(1, 1)
+                Set rFindResult = rOutputContents.Columns(1).Find(sTagName)
+            End If
+                       
+            'If not found, copy entire row and highlight
+            If rFindResult Is Nothing Then
+                Set rOutputRow = rOutputHeader.Offset(rOutputContents.End(xlDown).Row, 0)
+                rOutputRow.Interior.ColorIndex = 19
+                rOutputRow.Value = rOverrideRow.Value
+            'If found,
+            Else
+                'Set rOutputRow
+                If sDBF = "PV" Then
+                    Set rOutputRow = Range(rFindResult.Offset(0, -1), rFindResult.Offset(0, rOutputHeader.Columns.Count - 1))
+                Else
+                    Set rOutputRow = Range(rFindResult, rFindResult.Offset(0, rOutputHeader.Columns.Count))
+                End If
+                
+                'Check if only the tag exists and record should be deleted
+                iNumColumnsOtherThanTag = WorksheetFunction.CountIf(rOverrideRow, "*?")
+                If iNumColumnsOtherThanTag <= 1 Then
+                    rOutputRow.EntireRow.Delete                                        '********************* This is not the quickest. Could make a variable_temp then just clear row contents so it gets filtered out.
+                Else                                                                   '********************* But not significant unless you are removing bulk tags.
+                    'If cell has value, replace that cell only
+                    For Each rCell In rOverrideRow.Cells
+                        If rCell.Value <> "" Then
+                            rOutputRow.Offset(0, rCell.Column - rOverrideRow.Column).Cells(1) = rCell
+                            rOutputRow.Offset(0, rCell.Column - rOverrideRow.Column).Cells(1).Interior.ColorIndex = 19
+                        End If
+                    Next rCell
+                End If
+            End If
+        Next rOverrideRow
+    End If
+End Function
+
+Sub ExportTxt(fullFileName As String, sheetName As String, startRowNum As Integer)
+    Dim r As Variant, cell As String
+    Dim rowDex As Integer, colDex As Integer
+    Dim sTemp As String
+    Dim FNum As Integer
+    Dim exportRange As Variant
+    Dim sheet As Worksheet
+    
+    Dim NumRows As Long
+    Dim NumCols As Long
+    
+    FNum = FreeFile
+    Open fullFileName For Output Access Write As #FNum
+    
+    Set sheet = Worksheets(sheetName)
+    
+    exportRange = sheet.UsedRange.Value
+    
+    NumRows = UBound(exportRange)
+    NumCols = UBound(exportRange, 2)
+    For rowDex = startRowNum To NumRows
+        sTemp = ""
+        For colDex = 1 To NumCols
+            sTemp = sTemp & exportRange(rowDex, colDex)
+        Next colDex
+
+        Print #FNum, sTemp
+    Next rowDex
+    
+    Close #FNum
+End Sub
+
+Sub WriteToDBFs()
+
+    Dim sPath As String
+    Dim iMsgBox As Integer
+    
+    sPath = Range("Config_ProjectPath").Value
+    
+    
+    'On Error GoTo ErrorHandler:
+        If Range("variable_Header").End(xlDown).Row <> 1048576 Then
+            Call WriteTableToDBF(sPath, "variable")
+        End If
+        
+        If Range("digalm_Header").End(xlDown).Row <> 1048576 Then
+            Call WriteTableToDBF(sPath, "digalm")
+        End If
+        
+        If Range("trend_Header").End(xlDown).Row <> 1048576 Then
+            Call WriteTableToDBF(sPath, "trend")
+        End If
+    Application.StatusBar = "Writing to dbfs at '" & sPath & "' is complete."
+    
+    
+ExitProcedure:
+    Exit Sub
+    
+ErrorHandler:
+    MsgBox "Operation Failed: " & Err.Description
+    Application.StatusBar = Chr(74) & Chr(97) & Chr(107) & Chr(101) & Chr(32) & Chr(105) & Chr(115) & Chr(32) & Chr(65) & Chr(119) & Chr(101) & Chr(115) & Chr(111) & Chr(109) & Chr(101)
+    Exit Sub
+
+End Sub
+
+
+Sub WriteTableToDBF(sPath As String, sFileName As String)
+
+    'sPath = "C:\Citect 7.5\User\SR_RA_P001\"
+    'sFileName = "variable"
+    
+    Dim oConnection As Object
+    Dim oRecordSet As Object
+    
+    Dim rHeader As Range
+    Dim rContents As Range
+    Dim rRow As Range
+    Dim rCell As Range
+    
+    Dim sFieldname As String
+    Dim sValue As String
+    
+    Application.StatusBar = "Writing to " & sPath & "\" & sFileName & ".dbf"
+        
+    'Create the ADODB connection object.
+    Set oConnection = CreateObject("ADODB.connection")
+    
+    'Open the connection.
+    oConnection.Open "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=" & sPath & ";Extended Properties=dBASE IV;"
+    
+    'Create the ADODB recordset object.
+    Set oRecordSet = CreateObject("ADODB.recordset")
+    
+    'Open RecordSet
+    'recordset.Open Source, ActiveConnection, CursorType, LockType, Options
+    oRecordSet.Open sFileName, oConnection, 0, 2
+      
+    'Delete all values
+    Do Until oRecordSet.EOF
+        oRecordSet.Delete
+        oRecordSet.Update
+        oRecordSet.MoveNext
+    Loop
+    
+    'Set header/contents for filename
+    Set rHeader = Range(sFileName & "_Header")
+    'rHeader.Select
+    Set rContents = Range(rHeader.Offset(1, 0), rHeader.Offset(rHeader.End(xlDown).Row - rHeader.Row, 0))
+    'rContents.Select
+    
+    'For each row, for each cell, add record
+    For Each rRow In rContents.Rows
+        oRecordSet.AddNew
+        For Each rCell In rRow.Cells
+            sFieldname = rHeader.Offset(0, rCell.Column - rRow.Column).Cells(1).Value
+            sValue = rCell.Value
+            oRecordSet.Fields(sFieldname) = sValue
+        Next rCell
+        oRecordSet.Update
+    Next rRow
+    
+    'Close the recordet and the connection.
+    oRecordSet.Close
+    oConnection.Close
+    
+    'Release the objects.
+    Set oRecordSet = Nothing
+    Set oConnection = Nothing
+
+End Sub
+
+Sub UpdateAll()
+
+Dim ws As Worksheet
+Dim sSheetName As String
+Dim iMsgBox As Integer
+Dim iColourIndex As Integer
+Dim sCurrentSheet As String
+
+sCurrentSheet = Application.ActiveSheet.Name
+
+iMsgBox = MsgBox("Update every sheet coloured pale green. Are you sure?", vbYesNo)
+If iMsgBox = vbYes Then
+    ' Save File before changing stuff
+    SaveCopyToDir ("\\10.10.10.2\EEHA Automation\25. User\jsmith\MassTagGenBackup")
+        
+    Application.StatusBar = "Updating all templates"
+
+    Application.ScreenUpdating = False
+    Application.Calculation = xlManual
+    
+    sCurrentSheet = Application.ActiveSheet.Name
+
+    RemoveAllFilters
+
+    For Each ws In Sheets
+         iColourIndex = ws.Tab.ColorIndex
+         sSheetName = ws.Name
+         If iColourIndex = 35 And sSheetName <> "Template_UDT" Then '(pale light green, top right on the colour grid), assume its a template
+             'MsgBox(sSheetName)
+             ws.Activate
+             Update_Template
+             Application.StatusBar = "Template updated; " & sSheetName
+         End If
+    Next ws
+
+    Application.StatusBar = "Template update complete."
+    
+End If
+
+Sheets(sCurrentSheet).Select
+
+Application.ScreenUpdating = True
+Application.Calculation = xlAutomatic
+
+
+End Sub
+
+Function SaveCopyToDir(dirPath As String)
+
+    Dim Wb As Workbook
+    Dim fileName As String
+    Dim fileSavePath As String
+    Dim timeStr As String
+    Dim hostName As String
+    
+    On Error GoTo ErrorHandler
+    
+    ' Check if the directory exists
+    If Len(Dir(dirPath, vbDirectory)) = 0 Then
+        Exit Function
+    End If
+
+    ' Get the active workbook
+    Set Wb = ActiveWorkbook
+
+    ' Get the computer's hostname
+    hostName = Environ("COMPUTERNAME")
+
+    ' Get the current time string in the format yyyy-mm-dd-hh-mm-ss
+    timeStr = Format(Now, "yyyy-mm-dd-hh-mm-ss")
+
+    ' Create the full file save path with the hostname, date, and time appended to the filename
+    fileName = Replace(Wb.Name, ".xlsm", "") & "_" & timeStr & ".xlsm"
+    fileSavePath = dirPath & "\" & fileName
+
+    ' Attempt to save a copy of the workbook to the directory
+    On Error GoTo ErrorHandler
+    Wb.SaveCopyAs fileSavePath
+
+
+    Exit Function
+
+ErrorHandler:
+
+End Function
+
+Sub RemoveAllFilters()
+
+       'Remove all filters on ANY workbook
+    '(ActiveWorkbook.Worksheets(i).AutoFilterMode = FALSE will delete filters)
+    Dim i As Integer
+    For i = 1 To ActiveWorkbook.Worksheets.Count
+        On Error Resume Next                            'Will chuck an error if no filters
+        ActiveWorkbook.Worksheets(i).ShowAllData
+        On Error GoTo 0
+    Next i
+
+
+
+End Sub
+Sub Update_Template()
+
+    Dim sName As String
+    Dim rCopyRange As Range
+    Dim rPasteRange As Range
+    Dim iMsgBox As Integer
+    
+    
+    sName = ActiveSheet.Name
+    If sName = "Template_UDT" Then
+        iMsgBox = MsgBox("This is the template you muppet", vbOK)
+        Exit Sub
+    End If
+    
+    RemoveAllFilters
+      
+    ActiveSheet.Name = sName & "_old"
+    Sheets("Template_UDT").Copy After:=ActiveSheet
+    ActiveSheet.Name = sName
+    ActiveSheet.Tab.ColorIndex = 35
+      
+    Set rCopyRange = Sheets(sName & "_old").Range("UDT_UpdateTemplateCopyArea")
+    Set rPasteRange = Sheets(sName).Range("UDT_UpdateTemplateCopyArea").Cells(1)
+    
+    'rCopyRange.Copy Destination:=rPasteRange
+    
+    rCopyRange.Copy
+    rPasteRange.PasteSpecial xlPasteAllExceptBorders
+      
+'    If rCopyRange.Cells.Count = rPasteRange.Cells.Count Then
+'        MsgBox ("Match")
+'    End If
+     
+    ' **** Example of how to fix up template change ****
+    
+'    Set rCopyRange = Sheets(sName & "_old").Range("A5:S1000")
+'    Set rPasteRange = Sheets(sName).Range("A5:S1000")
+'    rCopyRange.Copy Destination:=rPasteRange
+'
+'    Set rCopyRange = Sheets(sName & "_old").Range("T5:U1000")
+'    Set rPasteRange = Sheets(sName).Range("X5:Y1000")
+'    rCopyRange.Copy Destination:=rPasteRange
+'
+'    Set rCopyRange = Sheets(sName & "_old").Range("V5:Y1000")
+'    Set rPasteRange = Sheets(sName).Range("T5:W1000")
+'    rCopyRange.Copy Destination:=rPasteRange
+    
+     ' **** End ****
+
+    Application.DisplayAlerts = False
+    Sheets(sName & "_old").Delete
+    Application.DisplayAlerts = True
+
+    Apply_Top_Row
+    
+
+End Sub
+
+
+Sub Apply_Top_Row()
+    ' Must be called with the current sheet active
+    
+    Dim iNumOfTags As Integer
+    'Determine number of tags in UDT
+    If Range("UDT_Main_Header").End(xlDown).Row <> 1048576 Then
+        iNumOfTags = Range("UDT_Main_Header").End(xlDown).Row - Range("UDT_Main_Header").Row
+    Else
+        iNumOfTags = 0
+    End If
+    
+    'Clear all formulars
+    Range(Range("UDT_Formula_TopRow").Offset(1, 0), Range("UDT_Formula_TopRow").Offset(1, 0).End(xlDown).End(xlDown).End(xlDown)).ClearContents
+    
+    'Apply top row
+    If iNumOfTags > 1 Then
+        'Dont apply all formulas if PV not enabled to speed up.
+        If Range("Config_EnablePanelView").Value = False Then
+            Range("UDT_Formula_TopRow_NoPV").AutoFill Destination:=Range(Range("UDT_Formula_TopRow_NoPV"), Range("UDT_Formula_TopRow_NoPV").Offset(iNumOfTags - 1, 0)), Type:=xlFillValues
+            Range("UDT_Formula_TopRow_NoPV").Select
+        Else
+            Range("UDT_Formula_TopRow").AutoFill Destination:=Range(Range("UDT_Formula_TopRow"), Range("UDT_Formula_TopRow").Offset(iNumOfTags - 1, 0)), Type:=xlFillValues
+            Range("UDT_Formula_TopRow").Select
+        End If
+        
+    End If
+End Sub
+
+' Button press function for Import UDT button
+Sub Import_UDT()
+    Dim iMsgResult As Integer
+    Dim iNumOfTags As Integer
+    Dim rSetRange As Range
+    Dim rCopyRange As Range
+    Dim rPasteRange As Range
+    Dim sName
+    
+    ' Get sheet parameters
+    iNumOfTags = UDT_GetImportTagCount()
+    sName = ActiveSheet.Name
+    
+    ' Check for correct sheet
+    If sName = "Template_UDT" Then
+        iMsgResult = MsgBox("This is the template you muppet", vbOK)
+        Exit Sub
+
+    ElseIf Range("UDT_Import_Header").Columns.Hidden = True Then
+        ' Code should not reach this line
+        ' Handles button press with range hidden
+        iMsgResult = MsgBox("Please unhide UDT section before running this command.", 0, "UDT Columns Hidden")
+        Exit Sub
+    
+    ElseIf iNumOfTags = 0 Then
+        ' Displays poup if no tags exist in the UDT import section.
+        iMsgResult = MsgBox("No Tags to Import.", 0)
+        Exit Sub
+        
+    Else
+        ' Copy UDT Columns Name, DataType and Description into definition columns
+        Set rSetRange = Range(Range("UDT_Import_Header").Offset(1, 0), Range("UDT_Import_Header").End(xlDown))
+        Set rCopyRange = Union(rSetRange.Columns(1), rSetRange.Columns(2), rSetRange.Columns(4))
+        Set rPasteRange = Range("A5")
+        
+        rCopyRange.Copy
+        rPasteRange.PasteSpecial xlPasteAllExceptBorders
+                
+    End If
+End Sub
+    
+    
+' Button press function for Export UDT button
+Sub Export_UDT()
+    Dim iMsgResult As Integer
+    Dim iNumOfTags As Integer
+    Dim rCopyRange As Range
+    Dim rPasteRange As Range
+    Dim sName
+    Dim i As Integer
+    Dim iTargetColumns()
+    Dim iDestColumns()
+    
+    iTargetColumns = Array(1, 2, 3)
+    iDestColumns = Array(1, 2, 4)
+    
+    ' Get sheet parameters
+    iNumOfTags = UDT_GetMainTagCount()
+    sName = ActiveSheet.Name
+    
+    ' Check for correct sheet
+    If sName = "Template_UDT" Then
+        iMsgResult = MsgBox("This is the template you muppet", vbOK)
+        Exit Sub
+
+    ElseIf Range("UDT_Import_Header").Columns.Hidden = True Then
+        ' Code should not reach this line
+        ' Handles button press with range hidden
+        iMsgResult = MsgBox("Please unhide UDT section before running this command.", 0, "UDT Columns Hidden")
+        Exit Sub
+    
+    ElseIf iNumOfTags = 0 Then
+        ' Displays poup if no tags exist in the UDT import section.
+        iMsgResult = MsgBox("No Tags to Export.", 0)
+        Exit Sub
+        
+    Else
+        ' Copy UDT Columns Name, DataType and Description into definition columns
+        Set rCopyRange = Range(Range("UDT_Main_Header").Offset(1, 0), Range("UDT_Main_Header").End(xlDown))
+        Set rPasteRange = Union(Range("D5"), Range("E5"), Range("G5"))
+        
+        ' Iterate through columns to copy to, this should work as a single range
+        For i = 0 To 2
+            rCopyRange.Columns(iTargetColumns(i)).Copy
+            rPasteRange.Columns(iDestColumns(i)).PasteSpecial xlPasteAllExceptBorders
+        Next
+                
+    End If
+End Sub
+
+
+Sub Super_Clear_Outputs()
+    Clear_Outputs (1)
+End Sub
+
+
+Sub Regular_Clear_Outputs()
+    Clear_Outputs (0)
+End Sub
+
+
+Sub Clear_Outputs(bSuper As Boolean)
+    
+    Dim rRange As Range
+    
+    'Clear all output sheets + remove all borders
+    Clear_Range Range(Range("variable_Header").Offset(1, 0), Sheets("variable").Range("AZ1048576")), bSuper
+    Clear_Range Range(Range("variable_temp_Header").Offset(1, 0), Sheets("variable_temp").Range("AZ1048576")), bSuper
+    Clear_Range Range(Range("digalm_Header").Offset(1, 0), Sheets("digalm").Range("AZ1048576")), bSuper
+    Clear_Range Range(Range("digalm_temp_Header").Offset(1, 0), Sheets("digalm_temp").Range("AZ1048576")), bSuper
+    Clear_Range Range(Range("trend_Header").Offset(1, 0), Sheets("trend").Range("AZ1048576")), bSuper
+    Clear_Range Range(Range("trend_temp_Header").Offset(1, 0), Sheets("trend_temp").Range("AZ1048576")), bSuper
+    Clear_Range Range(Range("PV_temp_Header").Offset(1, 0), Sheets("PV_temp").Range("AZ1048576")), bSuper
+    Clear_Range Range(Range("PV_Header").Offset(1, 0), Sheets("PV").Range("AZ1048576")), bSuper
+
+    Application.StatusBar = "Clearing PV_CSV"
+    Set rRange = Range(Range("PV_CSV_Folder_Preamble").Offset(1, 0), Range("PV_CSV_Tag_Preamble").Offset(-1, 0))
+    rRange.EntireRow.Delete (xlShiftUp)
+    Range("PV_CSV_Folder_Preamble").Offset(1, 0).EntireRow.Insert (xlShiftDown)
+    Set rRange = Range(Range("PV_CSV_Tag_Preamble").Offset(1, 0), Range("PV_CSV_Tag_Preamble").Offset(1, 0).End(xlDown))
+    rRange.EntireRow.Delete (xlShiftUp)
+
+    Application.StatusBar = "Clearing PV_XML"
+    If Range("PV_XML_Triggers_End").Row - Range("PV_XML_Triggers").Row > 1 Then
+        Set rRange = Range(Range("PV_XML_Triggers").Offset(1, 0), Range("PV_XML_Triggers_End").Offset(-1, 0))
+        rRange.EntireRow.Delete (xlShiftUp)
+    End If
+    
+    If Range("PV_XML_Messages_End").Row - Range("PV_XML_Messages").Row > 1 Then
+        Set rRange = Range(Range("PV_XML_Messages").Offset(1, 0), Range("PV_XML_Messages_End").Offset(-1, 0))
+        rRange.EntireRow.Delete (xlShiftUp)
+    End If
+    Application.StatusBar = "All outputs cleared."
+    
+End Sub
+
+'Clears output of a given range and removes borders or deletes a given range
+Sub Clear_Range(rClearRange As Range, bSuperClear As Boolean)
+    Application.StatusBar = "Clearing " & rClearRange.Worksheet.Name
+    Range("A1").Select
+
+    If bSuperClear Then
+        rClearRange.Delete
+        'If run without saving workbook, excel will run out of memory.
+        'Not the most elegant solution, but saving the workbook will reduce the memory in Task Manager.
+        'Even saving a copy works (which is not supposed to modify open workbook in memory)
+        ActiveWorkbook.SaveCopyAs "C:\Temp\DeleteMe.xlsm"
+    Else
+        rClearRange.ClearContents
+        rClearRange.Borders.LineStyle = xlNone
+        rClearRange.Interior.ColorIndex = 0
+    End If
+    
+End Sub
+
+
+'**************************************************'
+'           Helper Function
+'**************************************************'
+
+
+'Determine number of tags in UDT import, must be run from target worksheet
+Function UDT_GetImportTagCount()
+    If Range("UDT_Import_Header").End(xlDown).Row <> 1048576 Then
+        UDT_GetImportTagCount = Range("UDT_Import_Header").End(xlDown).Row - Range("UDT_Import_Header").Row
+    Else
+        UDT_GetImportTagCount = 0
+    End If
+
+End Function
+
+
+'Determine number of tags in Main UDT section, must be run from target worksheet
+Function UDT_GetMainTagCount()
+    If Range("UDT_Main_Header").End(xlDown).Row <> 1048576 Then
+        UDT_GetMainTagCount = Range("UDT_Main_Header").End(xlDown).Row - Range("UDT_Main_Header").Row
+    Else
+        UDT_GetMainTagCount = 0
+    End If
+
+End Function
+
+
+
+
+Sub test()
+
+        'Clear all output sheets + remove all borders
+    Range(Range("variable_Header").Offset(1, 0), Sheets("variable").Range("AZ1048576")).Delete
+    ActiveWorkbook.Save
+    Range(Range("variable_temp_Header").Offset(1, 0), Sheets("variable_temp").Range("AZ1048576")).Delete
+    ActiveWorkbook.Save
+    Range(Range("digalm_Header").Offset(1, 0), Sheets("digalm").Range("AZ1048576")).Delete
+    ActiveWorkbook.Save
+    Range(Range("digalm_temp_Header").Offset(1, 0), Sheets("digalm_temp").Range("AZ1048576")).Delete
+    ActiveWorkbook.Save
+    Range(Range("trend_Header").Offset(1, 0), Sheets("trend").Range("AZ1048576")).Delete
+     ActiveWorkbook.Save
+    Range(Range("trend_temp_Header").Offset(1, 0), Sheets("trend_temp").Range("AZ1048576")).Delete
+     ActiveWorkbook.Save
+    Range(Range("PV_temp_Header").Offset(1, 0), Sheets("PV_temp").Range("AZ1048576")).Delete
+     ActiveWorkbook.Save
+    Range(Range("PV_Header").Offset(1, 0), Sheets("PV").Range("AZ1048576")).Delete
+
+
+
+End Sub
+
+
