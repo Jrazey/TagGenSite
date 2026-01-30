@@ -74,68 +74,83 @@ class UDTExpander:
             # Common Fields
             cluster = entry.get("cluster", "Cluster1")
             
+            # Parent Flags override Template Flags
+            parent_trends_enabled = entry.get("isTrend", False)
+            parent_alarms_enabled = entry.get("isAlarm", False)
+            
+            # --- SINGLE TAG LOGIC ---
             if entry.get("type") == "single":
-                # Single Tag Logic
-                base_name = entry.get("name", "")
+                
+                # Group A
+                base_name = entry.get("citectName") or entry.get("name", "")
                 base_addr = entry.get("address", "")
-                base_desc = entry.get("description", "")
+                
+                # Group E
                 equip = entry.get("equipment", base_name)
                 item = entry.get("item", "Value")
                 
-                # Check for trend/alarm flags
-                is_trend = entry.get("isTrend", False)
-                is_alarm = entry.get("isAlarm", False)
-                
+                # Group B
                 var_rec = {
                     "NAME": base_name,
-                    "TYPE": "DIGITAL", # TODO: Field for Data Type!
+                    "TYPE": entry.get("dataType", "DIGITAL"), 
                     "UNIT": "IO_DEV_1",
                     "ADDR": base_addr,
-                    "COMMENT": base_desc,
+                    "COMMENT": entry.get("description", ""),
                     "EQUIP": equip,
                     "ITEM": item,
-                    "CLUSTER": cluster
+                    "CLUSTER": cluster,
+                    "ENG_UNITS": entry.get("engUnits", ""),
+                    "FORMAT": "",
+                    "ENG_ZERO": entry.get("engZero", ""),
+                    "ENG_FULL": entry.get("engFull", "")
                 }
                 output["variable"].append(var_rec)
                 
-                if is_trend:
+                # Group C
+                if parent_trends_enabled:
                     trend_rec = {
-                         "NAME": base_name,
+                         "NAME": entry.get("trendName", base_name),
                          "EXPR": base_name,
                          "SAMPLEPER": entry.get("samplePeriod", "00:00:01"),
-                         "TYPE": "TRN_PERIODIC",
-                         "COMMENT": base_desc,
+                         "TYPE": entry.get("trendType", "TRN_PERIODIC"),
+                         "COMMENT": entry.get("description", ""),
                          "EQUIP": equip,
                          "ITEM": item,
-                         "CLUSTER": cluster
+                         "CLUSTER": cluster,
+                         "FILENAME": entry.get("trendName", base_name), # Usually matches Trend Name
+                         "FILES": entry.get("trendFiles", "2"),
+                         "STORMETHOD": entry.get("trendStorage", "Scaled"),
+                         "TRIG": entry.get("trendTrigger", "")
                     }
                     output["trend"].append(trend_rec)
                     
-                if is_alarm:
+                # Group D
+                if parent_alarms_enabled:
                     alm_rec = {
-                        "TAG": f"{base_name}_Alm",
-                        "NAME": f"{base_name}_Alm",
-                        "DESC": base_desc,
+                        "TAG": entry.get("alarmName", f"{base_name}_Alm"),
+                        "NAME": entry.get("alarmName", f"{base_name}_Alm"),
+                        "DESC": entry.get("alarmHelp", ""), 
                         "VAR_A": base_name,
                         "CATEGORY": entry.get("alarmCategory", "1"),
-                        "COMMENT": base_desc,
+                        "COMMENT": entry.get("description", ""),
                         "EQUIP": equip,
                         "ITEM": item,
-                        "CLUSTER": cluster
+                        "CLUSTER": cluster,
+                        "HELP": entry.get("alarmHelp", ""),
+                        "DELAY": entry.get("alarmDelay", "0")
                     }
                     output["digalm"].append(alm_rec)
 
+            # --- UDT LOGIC ---
             elif entry.get("type") == "udt" and entry.get("udt_type") in self.templates:
-                # UDT Logic
                 template = self.templates[entry["udt_type"]]
-                parent_name = entry.get("name", "")
+                parent_prefix = entry.get("name", "") # Prefix
                 parent_addr = entry.get("address", "")
                 parent_desc = entry.get("description", "")
                 
                 for member in template["members"]:
                     # 1. Variable Tag
-                    tag_name = f"{parent_name}{member['suffix']}"
-                    # Simple contact for address
+                    tag_name = f"{parent_prefix}{member['suffix']}"
                     tag_addr = f"{parent_addr}{member['address_offset']}"
                     tag_desc = member['comment_template'].format(parent_desc=parent_desc)
                     
@@ -145,38 +160,54 @@ class UDTExpander:
                         "UNIT": "IO_DEV_1",
                         "ADDR": tag_addr,
                         "COMMENT": tag_desc,
-                        "EQUIP": parent_name,    # User requirement: Instance -> Equip
-                        "ITEM": member['suffix'].strip('.'), # User requirement: Suffix -> Item
-                        "CLUSTER": cluster
+                        "EQUIP": parent_prefix,    
+                        "ITEM": member['suffix'].strip('.'), 
+                        "CLUSTER": cluster,
+                        "_tag_type": member['type'], # For UI Helper
+                        "trendName": tag_name,
+                        "samplePeriod": entry.get("samplePeriod", "00:00:01"), # Default
+                        "trendType": "TRN_PERIODIC",
+                        "trendFiles": "2",
+                        "trendStorage": "Scaled",
+                        "alarmName": f"{tag_name}_Alm",
+                        "alarmCategory": "1",
+                        "alarmPriority": "1",
+                        "alarmHelp": "",
+                        "alarmDelay": "0"
                     }
                     output["variable"].append(var_rec)
                     
                     # 2. Trend Tag
-                    if member.get("is_trend"):
+                    if member.get("is_trend") and parent_trends_enabled:
                         trend_rec = {
                             "NAME": tag_name,
                             "EXPR": tag_name,
-                            "SAMPLEPER": "00:00:01",
+                            "SAMPLEPER": entry.get("samplePeriod", "00:00:01"),
                             "TYPE": "TRN_PERIODIC",
                             "COMMENT": tag_desc,
-                            "EQUIP": parent_name,
+                            "EQUIP": parent_prefix,
                             "ITEM": member['suffix'].strip('.'),
-                            "CLUSTER": cluster
+                            "CLUSTER": cluster,
+                            "FILENAME": tag_name,
+                            "FILES": "2",
+                            "STORMETHOD": "Scaled"
                         }
                         output["trend"].append(trend_rec)
                         
                     # 3. Alarm Tag
-                    if member.get("is_alarm"):
+                    if member.get("is_alarm") and parent_alarms_enabled:
                         alm_rec = {
                             "TAG": f"{tag_name}_Alm",
                             "NAME": f"{tag_name}_Alm",
                             "DESC": member.get("alarm_help", tag_desc),
                             "VAR_A": tag_name,
-                            "CATEGORY": member.get("alarm_category", "1"),
+                            "CATEGORY": entry.get("alarmCategory", member.get("alarm_category", "1")),
                             "COMMENT": tag_desc,
-                            "EQUIP": parent_name,
+                            "EQUIP": parent_prefix,
                             "ITEM": member['suffix'].strip('.'),
-                            "CLUSTER": cluster
+                            "CLUSTER": cluster,
+                            "HELP": member.get("alarm_help", ""),
+                            "DELAY": "0"
                         }
                         output["digalm"].append(alm_rec)
                         

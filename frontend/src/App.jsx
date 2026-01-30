@@ -4,7 +4,8 @@ import axios from 'axios'
 import TagGrid from './components/TagGrid'
 import DiffModal from './components/DiffModal'
 import SettingsModal from './components/SettingsModal'
-import { Settings, Download } from 'lucide-react'
+import DBFPreviewModal from './components/DBFPreviewModal'
+import { Settings, Download, Eye } from 'lucide-react'
 import './index.css'
 
 function App() {
@@ -12,6 +13,7 @@ function App() {
   const [selectedProject, setSelectedProject] = useState(null);
   const [diff, setDiff] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [defaults, setDefaults] = useState(null);
@@ -38,14 +40,14 @@ function App() {
       .catch(console.error);
   }
 
-  const handleGenerate = async () => {
+  const generateData = async () => {
     // 1. Get tags from grid
-    if (!gridRef.current) return;
+    if (!gridRef.current) return null;
     const tags = gridRef.current.getTags();
 
     if (!selectedProject) {
       alert("Please select a project.");
-      return;
+      return null;
     }
 
     try {
@@ -54,14 +56,27 @@ function App() {
         project_path: selectedProject.path,
         tags: tags
       });
-
-      // 3. Show diff
-      setDiff(res.data.diff);
-      setIsModalOpen(true);
-
+      return res.data.diff;
     } catch (err) {
       console.error("Analysis Failed:", err);
       alert("Analysis failed. Check console.");
+      return null;
+    }
+  };
+
+  const handleGenerate = async () => {
+    const generatedDiff = await generateData();
+    if (generatedDiff) {
+      setDiff(generatedDiff);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handlePreview = async () => {
+    const generatedDiff = await generateData();
+    if (generatedDiff) {
+      setDiff(generatedDiff);
+      setIsPreviewOpen(true);
     }
   };
 
@@ -124,6 +139,9 @@ function App() {
           <button onClick={handleImport} title="Import from DBF">
             <Download size={18} style={{ marginRight: 4 }} /> Import
           </button>
+          <button onClick={handlePreview} title="View Raw DBF">
+            <Eye size={18} style={{ marginRight: 4 }} /> Preview Raw
+          </button>
           <button className="primary" onClick={handleGenerate}>Generate DBF</button>
         </div>
       </header>
@@ -136,6 +154,12 @@ function App() {
         diff={diff}
         onClose={() => setIsModalOpen(false)}
         onConfirm={confirmWrite}
+      />
+
+      <DBFPreviewModal
+        isOpen={isPreviewOpen}
+        diff={diff}
+        onClose={() => setIsPreviewOpen(false)}
       />
 
       <SettingsModal
