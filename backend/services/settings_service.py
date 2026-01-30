@@ -14,7 +14,8 @@ class SettingsService:
             "trend_history": "365 weeks", # Not a real DBF field usually, but useful conceptual logic
             "alarm_category": "1",
             "alarm_priority": "1",
-            "alarm_area": ""
+            "alarm_area": "",
+            "scada_root_path": r"C:\ProgramData\AVEVA Plant SCADA 2023 R2\User"
         }
         self.load()
 

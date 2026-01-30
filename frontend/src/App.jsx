@@ -5,7 +5,8 @@ import TagGrid from './components/TagGrid'
 import DiffModal from './components/DiffModal'
 import SettingsModal from './components/SettingsModal'
 import DBFPreviewModal from './components/DBFPreviewModal'
-import { Settings, Download, Eye } from 'lucide-react'
+import UDTBuilderModal from './components/UDTBuilderModal'
+import { Settings, Download, Eye, Database } from 'lucide-react'
 import './index.css'
 
 function App() {
@@ -16,6 +17,8 @@ function App() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isUDTBuilderOpen, setIsUDTBuilderOpen] = useState(false);
+  const [templates, setTemplates] = useState({});
   const [defaults, setDefaults] = useState(null);
 
   // Ref to access tag data from TagGrid
@@ -29,16 +32,37 @@ function App() {
         if (res.data.length > 0) setSelectedProject(res.data[0]);
       })
       .catch(err => console.error("Failed to fetch projects:", err));
-
-    // Fetch Defaults
-    fetchDefaults();
   }, []);
 
-  const fetchDefaults = () => {
-    axios.get('http://127.0.0.1:8000/api/settings')
+  // Fetch Defaults
+  useEffect(() => {
+    if (selectedProject) {
+      fetchDefaults(selectedProject.path);
+    } else {
+      setDefaults({});
+    }
+  }, [selectedProject]);
+
+  const fetchDefaults = (projPath) => {
+    if (!projPath) {
+      if (!selectedProject) return;
+      projPath = selectedProject.path;
+    }
+    axios.get(`http://127.0.0.1:8000/api/settings?project_path=${encodeURIComponent(projPath)}`)
       .then(res => setDefaults(res.data))
       .catch(console.error);
   }
+
+  // Fetch Templates (for TagGrid dropdown)
+  useEffect(() => {
+    fetchTemplates();
+  }, [isUDTBuilderOpen]);
+
+  const fetchTemplates = () => {
+    axios.get('http://127.0.0.1:8000/api/templates/detail')
+      .then(res => setTemplates(res.data))
+      .catch(console.error);
+  };
 
   const generateData = async () => {
     // 1. Get tags from grid
@@ -133,6 +157,9 @@ function App() {
           </select>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setIsUDTBuilderOpen(true)} title="Manage UDTs">
+            <Database size={18} style={{ marginRight: 4 }} /> Manage UDTs
+          </button>
           <button onClick={() => setIsSettingsOpen(true)} title="Settings">
             <Settings size={18} />
           </button>
@@ -146,7 +173,7 @@ function App() {
         </div>
       </header>
       <main style={{ padding: '16px', overflow: 'auto', height: 'calc(100vh - 60px)' }}>
-        <TagGrid project={selectedProject} defaults={defaults} ref={gridRef} />
+        <TagGrid project={selectedProject} defaults={defaults} templates={templates} ref={gridRef} />
       </main>
 
       <DiffModal
@@ -164,10 +191,16 @@ function App() {
 
       <SettingsModal
         isOpen={isSettingsOpen}
+        project={selectedProject}
         onClose={() => {
           setIsSettingsOpen(false);
-          fetchDefaults(); // Refresh on close
+          if (selectedProject) fetchDefaults(selectedProject.path);
         }}
+      />
+
+      <UDTBuilderModal
+        isOpen={isUDTBuilderOpen}
+        onClose={() => setIsUDTBuilderOpen(false)}
       />
     </>
   )

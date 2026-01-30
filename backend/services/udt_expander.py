@@ -1,8 +1,10 @@
 
 from typing import List, Dict, Any
+from services.tag_sanitizer import TagSanitizer
 
 class UDTExpander:
     def __init__(self):
+        self.sanitizer = TagSanitizer()
         # Basic templates
         self.templates = {
             "Motor_Basic": {
@@ -59,11 +61,13 @@ class UDTExpander:
     def get_templates(self) -> List[str]:
         return list(self.templates.keys())
 
-    def expand_tags(self, tag_entries: List[Dict]) -> Dict[str, List[Dict]]:
+    def expand_tags(self, tag_entries: List[Dict], override_templates: Dict[str, Any] = None) -> Dict[str, List[Dict]]:
         """
         Takes a list of user-defined 'TagEntries' (manual or UDT instances).
         Returns a dictionary of 'variable', 'trend', 'digalm' lists ready for DBF comparison.
         """
+        templates = override_templates if override_templates else self.templates
+        
         output = {
             "variable": [],
             "trend": [],
@@ -93,7 +97,7 @@ class UDTExpander:
                 var_rec = {
                     "NAME": base_name,
                     "TYPE": entry.get("dataType", "DIGITAL"), 
-                    "UNIT": "IO_DEV_1",
+                    "UNIT": entry.get("ioDevice", ""),
                     "ADDR": base_addr,
                     "COMMENT": entry.get("description", ""),
                     "EQUIP": equip,
@@ -142,73 +146,120 @@ class UDTExpander:
                     output["digalm"].append(alm_rec)
 
             # --- UDT LOGIC ---
-            elif entry.get("type") == "udt" and entry.get("udt_type") in self.templates:
-                template = self.templates[entry["udt_type"]]
-                parent_prefix = entry.get("name", "") # Prefix
+            elif entry.get("type") == "udt" and entry.get("udt_type") in templates:
+                template = templates[entry["udt_type"]]
+                # If template logic stored slightly differently in DB (e.g. wrapper), handle it.
+                # Assuming structure { "members": [...] }
+                # DB templates might be just the Members List if I store it that way?
+                # Let's standardize: The DB stores the whole object or we reconstruct it.
+                # In main.py I will ensure it matches { "members": ... } structure.
+                
+                members = template.get("members", []) if isinstance(template, dict) else []
+                
+                parent_base = entry.get("citectName") or entry.get("name", "")
                 parent_addr = entry.get("address", "")
                 parent_desc = entry.get("description", "")
                 
-                for member in template["members"]:
+                # Master Switches (Parent Row)
+                parent_trends_enabled = entry.get("isTrend", False)
+                parent_alarms_enabled = entry.get("isAlarm", False)
+
+                for member in members:
                     # 1. Variable Tag
-                    tag_name = f"{parent_prefix}{member['suffix']}"
+                    # Name = ParentTagName + Sanitized(Suffix)
+                    # e.g Parent="New_Tag_Test", Suffix=".Run" -> "_Run" => "New_Tag_Test_Run"
+                    
+                    sanitized_suffix = self.sanitizer.sanitize(member['suffix'])
+                    tag_name = f"{parent_base}{sanitized_suffix}"
+                    # Address = Base + Offset (or just concatenation if offset starts with modifier)
+                    # Adhering to prompt: [Parent_Address][Member_Suffix]
                     tag_addr = f"{parent_addr}{member['address_offset']}"
+                    
+                    # Description
                     tag_desc = member['comment_template'].format(parent_desc=parent_desc)
                     
+                    # Metadata Mapping
+                    # EQUIP = Parent Prefix
+                    # ITEM = Member Suffix (stripped logic if needed, but Prompt says "Member Suffix")
+                    # EQUIP = Parent Prefix (which is usually the Equipment Name in this schema)
+                    # ITEM = Member Suffix (stripped logic if needed, but Prompt says "Member Suffix")
+                    # Update: Using 'name' (Prefix) as Equipment is safer than full Tag Name
+                    equip_val = entry.get("name", "")
+                    item_val = member['suffix'].lstrip('.')
+
                     var_rec = {
                         "NAME": tag_name,
                         "TYPE": member['type'],
-                        "UNIT": "IO_DEV_1",
+                        "UNIT": entry.get("ioDevice", ""), # Inherit I/O Device
                         "ADDR": tag_addr,
                         "COMMENT": tag_desc,
-                        "EQUIP": parent_prefix,    
-                        "ITEM": member['suffix'].strip('.'), 
+                        "EQUIP": equip_val,    
+                        "ITEM": item_val, 
                         "CLUSTER": cluster,
-                        "_tag_type": member['type'], # For UI Helper
+                        
+                        # New Fields
+                        "ENG_UNITS": member.get("engUnits", ""),
+                        "FORMAT": member.get("format", ""),
+                        "ENG_ZERO": member.get("engZero", ""),
+                        "ENG_FULL": member.get("engFull", ""),
+
+                        "_tag_type": member['type'], 
+                        
+                        # Trend Attributes mapping
                         "trendName": tag_name,
-                        "samplePeriod": entry.get("samplePeriod", "00:00:01"), # Default
-                        "trendType": "TRN_PERIODIC",
-                        "trendFiles": "2",
-                        "trendStorage": "Scaled",
+                        "samplePeriod": member.get("sample_period", "00:00:01"),
+                        "trendType": member.get("trend_type", "TRN_PERIODIC"),
+                        "trendFiles": member.get("trend_files", "2"),
+                        "trendStorage": member.get("trend_storage", "Scaled"),
+                        "isTrend": member.get("is_trend", False) and parent_trends_enabled,
+
+                        # Alarm Attributes mapping
                         "alarmName": f"{tag_name}_Alm",
-                        "alarmCategory": "1",
-                        "alarmPriority": "1",
-                        "alarmHelp": "",
-                        "alarmDelay": "0"
+                        "alarmCategory": member.get("alarm_category", "1"),
+                        "alarmPriority": member.get("alarm_priority", "1"),
+                        "alarmHelp": member.get("alarm_help", ""),
+                        "alarmArea": member.get("alarm_area", ""),
+                        "alarmDelay": "0",
+                        "isAlarm": member.get("is_alarm", False) and parent_alarms_enabled
                     }
                     output["variable"].append(var_rec)
                     
                     # 2. Trend Tag
+                    # Logic: Member.hasTrend AND Parent.isTrend
                     if member.get("is_trend") and parent_trends_enabled:
                         trend_rec = {
                             "NAME": tag_name,
-                            "EXPR": tag_name,
-                            "SAMPLEPER": entry.get("samplePeriod", "00:00:01"),
-                            "TYPE": "TRN_PERIODIC",
+                            "EXPR": tag_name, # Expression is usually the tag name
+                            "SAMPLEPER": member.get("sample_period", "00:00:01"),
+                            "TYPE": member.get("trend_type", "TRN_PERIODIC"),
                             "COMMENT": tag_desc,
-                            "EQUIP": parent_prefix,
-                            "ITEM": member['suffix'].strip('.'),
+                            "EQUIP": equip_val,
+                            "ITEM": item_val,
                             "CLUSTER": cluster,
                             "FILENAME": tag_name,
-                            "FILES": "2",
-                            "STORMETHOD": "Scaled"
+                            "FILES": member.get("trend_files", "2"),
+                            "STORMETHOD": member.get("trend_storage", "Scaled")
                         }
                         output["trend"].append(trend_rec)
                         
                     # 3. Alarm Tag
+                    # Logic: Member.hasAlarm AND Parent.isAlarm
                     if member.get("is_alarm") and parent_alarms_enabled:
-                        alm_rec = {
+                         alm_rec = {
                             "TAG": f"{tag_name}_Alm",
                             "NAME": f"{tag_name}_Alm",
                             "DESC": member.get("alarm_help", tag_desc),
                             "VAR_A": tag_name,
-                            "CATEGORY": entry.get("alarmCategory", member.get("alarm_category", "1")),
+                            "CATEGORY": member.get("alarm_category", "1"),
+                            "PRIORITY": member.get("alarm_priority", "1"),
+                            "AREA": member.get("alarm_area", ""),
                             "COMMENT": tag_desc,
-                            "EQUIP": parent_prefix,
-                            "ITEM": member['suffix'].strip('.'),
+                            "EQUIP": equip_val,
+                            "ITEM": item_val,
                             "CLUSTER": cluster,
                             "HELP": member.get("alarm_help", ""),
                             "DELAY": "0"
                         }
-                        output["digalm"].append(alm_rec)
+                         output["digalm"].append(alm_rec)
                         
         return output

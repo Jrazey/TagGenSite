@@ -32,3 +32,18 @@ class TagEntry(Base):
     
     # UI State
     is_expanded = Column(Boolean, default=False)
+
+class ProjectState(Base):
+    __tablename__ = "project_states"
+    
+    project_path = Column(String, primary_key=True, index=True)
+    tags_json = Column(String) # JSON blob of the entire grid state
+    settings_json = Column(String, default="{}") # Project-specific defaults
+    updated_at = Column(String) # ISO timestamp
+
+class UdtTemplate(Base):
+    __tablename__ = "udt_templates"
+    
+    name = Column(String, primary_key=True, index=True)
+    description = Column(String, default="")
+    members_json = Column(String) # JSON list of members

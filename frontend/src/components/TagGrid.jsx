@@ -5,11 +5,10 @@ import axios from 'axios';
 import { ChevronRight, ChevronDown, Plus, Lock, Unlock } from 'lucide-react';
 import TagDetailModal from './TagDetailModal';
 
-const TagGrid = forwardRef(({ project, defaults }, ref) => {
+const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
     const [data, setData] = useState([]);
     const [expanded, setExpanded] = useState({});
     const [isLocked, setIsLocked] = useState({});
-    const [templates, setTemplates] = useState([]);
 
     // Modal State
     const [editingRowIndex, setEditingRowIndex] = useState(null);
@@ -115,12 +114,8 @@ const TagGrid = forwardRef(({ project, defaults }, ref) => {
         }
     }));
 
-    // Fetch templates
-    useEffect(() => {
-        axios.get('http://127.0.0.1:8000/api/templates')
-            .then(res => setTemplates(res.data))
-            .catch(console.error);
-    }, []);
+    // Templates now passed via props from App.jsx
+    // useEffect(() => { ... }, []);
 
     // Mock initial data
     useEffect(() => {
@@ -171,7 +166,10 @@ const TagGrid = forwardRef(({ project, defaults }, ref) => {
             if (rowData && rowData.type === 'udt' && (!rowData.subRows || rowData.subRows.length === 0)) {
                 try {
                     const res = await axios.post('http://127.0.0.1:8000/api/expand', { ...rowData });
-                    const children = res.data.map(c => ({
+                    // Filter: Only use 'variable' records (which now contain all metadata)
+                    const variables = res.data.filter(c => c._tag_type === 'variable');
+
+                    const children = variables.map(c => ({
                         ...c,
                         type: 'child',
                         cluster: c.CLUSTER,
@@ -187,30 +185,34 @@ const TagGrid = forwardRef(({ project, defaults }, ref) => {
                         format: c.FORMAT,
                         description: c.COMMENT,
 
-                        isTrend: !!c.SAMPLEPER,
+                        isTrend: c.isTrend,
                         trendName: c.trendName || c.NAME,
-                        samplePeriod: c.SAMPLEPER,
+                        samplePeriod: c.samplePeriod || c.SAMPLEPER,
                         trendType: c.trendType || (c.SAMPLEPER ? 'TRN_PERIODIC' : ''),
-                        trendTrigger: c.TRIG,
-                        trendFilename: c.FILENAME,
+                        trendTrigger: c.trendTrigger || c.TRIG,
+                        trendFilename: c.trendFilename || c.FILENAME,
 
-                        isAlarm: !!c.CATEGORY,
+                        isAlarm: c.isAlarm,
                         alarmName: c.alarmName || (c.NAME + "_Alm"),
-                        alarmCategory: c.CATEGORY,
-                        alarmPriority: c.PRIORITY,
-                        alarmHelp: c.HELP,
+                        alarmCategory: c.alarmCategory || c.CATEGORY,
+                        alarmPriority: c.alarmPriority || c.PRIORITY,
+                        alarmHelp: c.alarmHelp || c.HELP,
+                        alarmArea: c.alarmArea || c.AREA,
 
                         equipment: c.EQUIP,
                         item: c.ITEM,
                     }));
 
-                    const newData = [...data];
-                    newData[rowIndex].subRows = children;
-                    setData(newData);
+                    setData(prev => {
+                        const newData = [...prev];
+                        // Immutable update of the row
+                        newData[rowIndex] = { ...newData[rowIndex], subRows: children };
+                        return newData;
+                    });
                 } catch (e) { console.error("Expand failed", e); }
             }
         });
-    }, [expanded]);
+    }, [expanded, data]);
 
     // Handlers
     const sanitizeName = async (val) => {
@@ -227,7 +229,7 @@ const TagGrid = forwardRef(({ project, defaults }, ref) => {
             return newData;
         });
 
-        if (!isLocked[rowId] && type === 'single') {
+        if (!isLocked[rowId]) {
             const combined = `${newVal}_${currentAddr}`;
             const sanitized = await sanitizeName(combined);
             setData(prev => {
@@ -252,7 +254,7 @@ const TagGrid = forwardRef(({ project, defaults }, ref) => {
             return newData;
         });
 
-        if (!isLocked[rowId] && type === 'single') {
+        if (!isLocked[rowId]) {
             // If prefix exists, try to combine
             if (currentPrefix) {
                 const combined = `${currentPrefix}_${newVal}`;
@@ -272,10 +274,40 @@ const TagGrid = forwardRef(({ project, defaults }, ref) => {
         }
     };
 
+    const handleTypeChange = (rowIndex, newType) => {
+        setData(prev => {
+            const newData = [...prev];
+            const row = { ...newData[rowIndex] };
+
+            if (newType === 'Single') {
+                row.type = 'single';
+                row.udt_type = 'Single';
+                row.subRows = []; // Clear any children
+            } else {
+                row.type = 'udt';
+                row.udt_type = newType;
+                row.subRows = []; // Clear to force re-expansion with new template
+            }
+
+            newData[rowIndex] = row;
+            return newData;
+        });
+    };
+
     const handleFieldChange = (rowIndex, field, val) => {
         setData(prev => {
             const newData = [...prev];
-            newData[rowIndex] = { ...newData[rowIndex], [field]: val };
+            const row = { ...newData[rowIndex], [field]: val };
+
+            // If UDT, clear subRows to force refresh of preview
+            if (row.type === 'udt') {
+                row.subRows = [];
+                // We might need to trigger a re-fetch if it's currently expanded.
+                // The useEffect depends on 'expanded', checking if subRows is empty.
+                // So clearing it here should trigger the existing useEffect logic!
+            }
+
+            newData[rowIndex] = row;
             return newData;
         });
     }
@@ -288,22 +320,32 @@ const TagGrid = forwardRef(({ project, defaults }, ref) => {
     const handleCheckboxChange = (rowIndex, field, checked) => {
         setData(prev => {
             const newData = [...prev];
-            const row = newData[rowIndex]; // This is a clone of the row object? No, strict mode might complain if we mutate.
-            const newRow = { ...row, [field]: checked };
+            const row = { ...newData[rowIndex], [field]: checked };
 
             // Pre-fill Defaults
             if (field === 'isTrend' && checked) {
-                if (!newRow.samplePeriod) newRow.samplePeriod = defaults?.sample_period || '00:00:01';
-                if (!newRow.trendType) newRow.trendType = defaults?.trend_type || 'TRN_PERIODIC';
-                if (!newRow.trendName) newRow.trendName = newRow.citectName;
+                if (!row.samplePeriod) row.samplePeriod = defaults?.sample_period || '00:00:01';
+                if (!row.trendType) row.trendType = defaults?.trend_type || 'TRN_PERIODIC';
+                if (!row.trendStorage) row.trendStorage = defaults?.trend_storage || 'Scaled';
+                if (!row.trendFiles) row.trendFiles = defaults?.trend_files || '';
+                // Default Name
+                if (!row.trendName) row.trendName = row.citectName;
             }
             if (field === 'isAlarm' && checked) {
-                if (!newRow.alarmCategory) newRow.alarmCategory = defaults?.alarm_category || '1';
-                if (!newRow.alarmPriority) newRow.alarmPriority = defaults?.alarm_priority || '1';
-                if (!newRow.alarmName) newRow.alarmName = newRow.citectName + "_Alm";
+                if (!row.alarmCategory) row.alarmCategory = defaults?.alarm_category || '1';
+                if (!row.alarmPriority) row.alarmPriority = defaults?.alarm_priority || '1';
+                if (!row.alarmArea) row.alarmArea = defaults?.alarm_area || '';
+                if (!row.alarmHelp) row.alarmHelp = defaults?.alarm_help || '';
+                // Default Name
+                if (!row.alarmName) row.alarmName = row.citectName + "_Alm";
             }
 
-            newData[rowIndex] = newRow;
+            // If UDT, clear subRows to force refresh of preview logic (Master Switches)
+            if (row.type === 'udt') {
+                row.subRows = [];
+            }
+
+            newData[rowIndex] = row;
             return newData;
         });
     };
@@ -378,10 +420,30 @@ const TagGrid = forwardRef(({ project, defaults }, ref) => {
                 {
                     accessorKey: 'udt_type',
                     header: 'Type',
-                    cell: ({ getValue, row }) => <span style={{ fontSize: '0.8em', color: 'var(--accent-color)' }}>
-                        {row.original.type === 'udt' ? getValue() : (row.original.type === 'child' ? row.original.udt_type : 'Single')}
-                    </span>,
-                    size: 80,
+                    cell: ({ getValue, row }) => {
+                        return (
+                            <select
+                                value={row.original.type === 'single' ? 'Single' : getValue()}
+                                onChange={(e) => handleTypeChange(row.index, e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    background: 'transparent',
+                                    color: 'var(--accent-color)',
+                                    border: 'none',
+                                    fontSize: '0.9em',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                <option value="Single">Single Tag</option>
+                                <optgroup label="UDT Templates">
+                                    {templates && Object.keys(templates).map(t => (
+                                        <option key={t} value={t}>{t}</option>
+                                    ))}
+                                </optgroup>
+                            </select>
+                        );
+                    },
+                    size: 100,
                     meta: { isSticky: true, left: 250 }
                 },
                 {
@@ -423,49 +485,61 @@ const TagGrid = forwardRef(({ project, defaults }, ref) => {
                 {
                     accessorKey: 'dataType',
                     header: 'Data Type',
-                    cell: ({ getValue, row }) =>
-                        row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'dataType', e.target.value)} />,
+                    cell: ({ getValue, row }) => {
+                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
+                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
+                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'dataType', e.target.value)} />
+                    },
                     size: 80
                 },
                 {
                     accessorKey: 'engUnits',
                     header: 'Eng Units',
-                    cell: ({ getValue, row }) =>
-                        row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'engUnits', e.target.value)} />,
+                    cell: ({ getValue, row }) => {
+                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
+                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
+                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'engUnits', e.target.value)} />
+                    },
                     size: 70
                 },
                 {
                     accessorKey: 'engZero',
                     header: 'Zero',
-                    cell: ({ getValue, row }) =>
-                        row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'engZero', e.target.value)} />,
+                    cell: ({ getValue, row }) => {
+                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
+                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
+                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'engZero', e.target.value)} />
+                    },
                     size: 60
                 },
                 {
                     accessorKey: 'engFull',
                     header: 'Full',
-                    cell: ({ getValue, row }) =>
-                        row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'engFull', e.target.value)} />,
+                    cell: ({ getValue, row }) => {
+                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
+                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
+                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'engFull', e.target.value)} />
+                    },
                     size: 60
                 },
                 {
                     accessorKey: 'format',
                     header: 'Format',
-                    cell: ({ getValue, row }) =>
-                        row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'format', e.target.value)} />,
+                    cell: ({ getValue, row }) => {
+                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
+                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
+                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'format', e.target.value)} />
+                    },
                     size: 70
                 },
                 {
                     accessorKey: 'description',
                     header: 'Comment',
-                    cell: ({ getValue, row }) =>
-                        row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'description', e.target.value)} />,
+                    cell: ({ getValue, row }) => {
+                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
+                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
+                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'description', e.target.value)} />
+                    },
                     size: 200,
                     meta: { isSeparated: true }
                 }
@@ -480,37 +554,53 @@ const TagGrid = forwardRef(({ project, defaults }, ref) => {
                 {
                     id: 'isTrend',
                     header: 'Trend?',
-                    cell: ({ row }) => (
-                        row.original.type === 'child' ? null :
-                            <input type="checkbox" checked={row.original.isTrend || false} onChange={(e) => handleCheckboxChange(row.index, 'isTrend', e.target.checked)} style={{ width: 'auto' }} />
-                    ),
+                    cell: ({ row }) => {
+                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
+                        return <input
+                            type="checkbox"
+                            checked={row.original.isTrend || false}
+                            disabled={row.original.type === 'child'}
+                            onChange={(e) => handleCheckboxChange(row.index, 'isTrend', e.target.checked)}
+                            style={{ width: 'auto', opacity: row.original.type === 'child' ? 0.6 : 1 }}
+                        />
+                    },
                     size: 50
                 },
                 {
                     accessorKey: 'samplePeriod',
                     header: 'Period',
-                    cell: ({ getValue, row }) => (
-                        row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
+                    cell: ({ getValue, row }) => {
+                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
+                        // Hide detail if Trend is disabled for this row
+                        if (row.original.type === 'child' && !row.original.isTrend) return null;
+
+                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
                             <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, 'samplePeriod', e.target.value)} disabled={!row.original.isTrend} />
-                    ),
+                    },
                     size: 80
                 },
                 {
                     accessorKey: 'trendType',
                     header: 'Type',
-                    cell: ({ getValue, row }) => (
-                        row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
+                    cell: ({ getValue, row }) => {
+                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
+                        if (row.original.type === 'child' && !row.original.isTrend) return null;
+
+                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
                             <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, 'trendType', e.target.value)} disabled={!row.original.isTrend} />
-                    ),
+                    },
                     size: 120
                 },
                 {
                     accessorKey: 'trendTrigger',
                     header: 'Trigger',
-                    cell: ({ getValue, row }) => (
-                        row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
+                    cell: ({ getValue, row }) => {
+                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
+                        if (row.original.type === 'child' && !row.original.isTrend) return null;
+
+                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
                             <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, 'trendTrigger', e.target.value)} disabled={!row.original.isTrend} />
-                    ),
+                    },
                     size: 150,
                     meta: { isSeparated: true }
                 }
@@ -525,28 +615,40 @@ const TagGrid = forwardRef(({ project, defaults }, ref) => {
                 {
                     id: 'isAlarm',
                     header: 'Alarm?',
-                    cell: ({ row }) => (
-                        row.original.type === 'child' ? null :
-                            <input type="checkbox" checked={row.original.isAlarm || false} onChange={(e) => handleCheckboxChange(row.index, 'isAlarm', e.target.checked)} style={{ width: 'auto' }} />
-                    ),
+                    cell: ({ row }) => {
+                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
+                        return <input
+                            type="checkbox"
+                            checked={row.original.isAlarm || false}
+                            disabled={row.original.type === 'child'}
+                            onChange={(e) => handleCheckboxChange(row.index, 'isAlarm', e.target.checked)}
+                            style={{ width: 'auto', opacity: row.original.type === 'child' ? 0.6 : 1 }}
+                        />
+                    },
                     size: 50
                 },
                 {
                     accessorKey: 'alarmCategory',
                     header: 'Category',
-                    cell: ({ getValue, row }) => (
-                        row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
+                    cell: ({ getValue, row }) => {
+                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
+                        if (row.original.type === 'child' && !row.original.isAlarm) return null;
+
+                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
                             <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, 'alarmCategory', e.target.value)} disabled={!row.original.isAlarm} />
-                    ),
+                    },
                     size: 70
                 },
                 {
                     accessorKey: 'alarmPriority',
                     header: 'Priority',
-                    cell: ({ getValue, row }) => (
-                        row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
+                    cell: ({ getValue, row }) => {
+                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
+                        if (row.original.type === 'child' && !row.original.isAlarm) return null;
+
+                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
                             <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, 'alarmPriority', e.target.value)} disabled={!row.original.isAlarm} />
-                    ),
+                    },
                     size: 70,
                     meta: { isSeparated: true }
                 }
@@ -583,9 +685,12 @@ const TagGrid = forwardRef(({ project, defaults }, ref) => {
         columns,
         state: { expanded },
         onExpandedChange: setExpanded,
+        getRowId: (row, index, parent) => parent ? `${parent.id}.${index}` : index.toString(),
         getSubRows: row => row.subRows,
         getCoreRowModel: getCoreRowModel(),
         getExpandedRowModel: getExpandedRowModel(),
+        getRowCanExpand: row => row.original.type === 'udt' || (row.subRows && row.subRows.length > 0),
+        autoResetExpanded: false,
     });
 
     return (
@@ -599,27 +704,17 @@ const TagGrid = forwardRef(({ project, defaults }, ref) => {
                         name: 'New_Tag',
                         address: '', citectName: 'New_Tag',
                         isTrend: false, isAlarm: false,
-                        dataType: 'DIGITAL', engUnits: '', engZero: '', engFull: '', format: '', description: '',
+                        dataType: defaults?.dataType || 'DIGITAL',
+                        engUnits: defaults?.engUnits || '',
+                        engZero: defaults?.engZero || '',
+                        engFull: defaults?.engFull || '',
+                        format: defaults?.format || '',
+                        description: '',
                         equipment: '', item: 'Value',
                         subRows: []
                     }])
                 }}>
-                    <Plus size={14} style={{ marginRight: 4 }} /> Add Single Tag
-                </button>
-                <button onClick={() => {
-                    const template = templates[0] || 'Motor_Basic';
-                    setData([...data, {
-                        id: Date.now(), type: 'udt',
-                        cluster: defaults?.cluster || 'Cluster1',
-                        udt_type: template,
-                        name: 'New_Motor',
-                        address: '', citectName: 'New_Motor',
-                        isTrend: false, isAlarm: false,
-                        equipment: '', item: '',
-                        subRows: []
-                    }])
-                }}>
-                    <Plus size={14} style={{ marginRight: 4 }} /> Add UDT Instance
+                    <Plus size={14} style={{ marginRight: 4 }} /> Add Tag
                 </button>
             </div>
             <table className="tag-grid">

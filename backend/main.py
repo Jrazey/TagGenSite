@@ -12,7 +12,15 @@ from services.dbf_writer import DBFWriter
 from services.udt_expander import UDTExpander
 from services.dbf_reader import DBFReader
 from services.settings_service import SettingsService
-from models import Base, TagEntry, GlobalReplacement
+from models import Base, TagEntry, GlobalReplacement, ProjectState, UdtTemplate, ProjectState
+from database import engine, init_db, get_db
+from sqlalchemy.orm import Session
+from fastapi import Depends
+import json
+import datetime
+
+# Init DB
+init_db()
 
 app = FastAPI(title="PlantSCADA Tag Management")
 
@@ -26,12 +34,17 @@ app.add_middleware(
 )
 
 # Services
-scanner = ProjectScanner()
+# Services
+settings_service = SettingsService()
+defaults = settings_service.get_defaults()
+scanner = ProjectScanner(root_path=defaults.get("scada_root_path"))
 sanitizer = TagSanitizer()
 dbf_writer = DBFWriter()
 udt_expander = UDTExpander()
 dbf_reader = DBFReader()
-settings_service = SettingsService()
+udt_expander = UDTExpander()
+dbf_reader = DBFReader()
+# settings_service moved up
 
 # Pydantic Models for API
 class ProjectModel(BaseModel):
@@ -82,15 +95,89 @@ def update_replacements(rules: List[GlobalReplacementModel]):
     sanitizer.update_replacements(new_rules)
     return {"status": "updated", "count": len(new_rules)}
 
+
+
+from models import Base, TagEntry, GlobalReplacement, ProjectState, UdtTemplate
+
+# ... (Previous imports)
+
+class TemplateMember(BaseModel):
+    suffix: str
+    type: str # DIGITAL, INT, REAL..
+    address_offset: str
+    comment_template: str
+    is_trend: bool = False
+    is_alarm: bool = False
+    alarm_category: Optional[str] = "1"
+    alarm_help: Optional[str] = ""
+
+class TemplateModel(BaseModel):
+    name: str # PK
+    description: str
+    members: List[TemplateMember]
+
+# Helper to get all templates (Default + DB)
+def get_all_templates(db: Session):
+    # Start with defaults
+    templates = udt_expander.templates.copy()
+    
+    # Load from DB
+    db_templates = db.query(UdtTemplate).all()
+    for t in db_templates:
+        try:
+            members = json.loads(t.members_json)
+            # Ensure format matches what expander expects
+            templates[t.name] = {
+                "description": t.description,
+                "members": members
+            }
+        except:
+            continue
+    return templates
+
+@app.get("/api/templates")
+def list_templates(db: Session = Depends(get_db)):
+    all_temps = get_all_templates(db)
+    return list(all_temps.keys())
+
+@app.get("/api/templates/detail")
+def list_templates_detail(db: Session = Depends(get_db)):
+    """Returns full template objects for the builder."""
+    return get_all_templates(db)
+
+@app.post("/api/templates")
+def save_template(template: TemplateModel, db: Session = Depends(get_db)):
+    # Check if exists
+    existing = db.query(UdtTemplate).filter(UdtTemplate.name == template.name).first()
+    members_json = json.dumps([m.dict() for m in template.members])
+    
+    if existing:
+        existing.description = template.description
+        existing.members_json = members_json
+    else:
+        new_t = UdtTemplate(name=template.name, description=template.description, members_json=members_json)
+        db.add(new_t)
+    
+    db.commit()
+    return {"status": "saved", "name": template.name}
+
+@app.delete("/api/templates/{name}")
+def delete_template(name: str, db: Session = Depends(get_db)):
+    db.query(UdtTemplate).filter(UdtTemplate.name == name).delete()
+    db.commit()
+    return {"status": "deleted"}
+
 @app.post("/api/generate", response_model=GenerateResponse)
-def generate_tags(request: GenerateRequest):
+def generate_tags(request: GenerateRequest, db: Session = Depends(get_db)):
     """
-    1. Expand Tags
+    1. Expand Tags (using DB templates)
     2. Reconcile with DBF
     3. Return Diff
     """
+    templates = get_all_templates(db)
+    
     # 1. Expand
-    expanded = udt_expander.expand_tags(request.tags)
+    expanded = udt_expander.expand_tags(request.tags, override_templates=templates)
     
     # 2. Reconcile for each table type
     diffs = {}
@@ -110,16 +197,14 @@ def generate_tags(request: GenerateRequest):
     return {"diff": diffs}
 
 @app.post("/api/expand")
-def expand_single_tag(tag: Dict[str, Any]):
+def expand_single_tag(tag: Dict[str, Any], db: Session = Depends(get_db)):
     """
     Returns the expanded members for a single UDT instance.
-    Used for frontend 'preview' (expanding the row).
     """
+    templates = get_all_templates(db)
+    
     # Wrap in list
-    expanded = udt_expander.expand_tags([tag])
-    # Flatten structure for UI display?
-    # The UI probably wants a list of "Child Rows" which are just objects.
-    # We can return all created tags combined.
+    expanded = udt_expander.expand_tags([tag], override_templates=templates)
     
     combined = []
     for t_type in ["variable", "trend", "digalm"]:
@@ -128,16 +213,6 @@ def expand_single_tag(tag: Dict[str, Any]):
             combined.append(item)
             
     return combined
-
-@app.get("/api/templates")
-def list_templates():
-    return udt_expander.get_templates()
-
-class WriteRequest(BaseModel):
-    project_path: str
-    diff: Dict[str, Any] # The diff object returned by generate
-
-@app.post("/api/write")
 def write_changes(request: WriteRequest):
     """
     Commit changes to DBF files.
@@ -167,12 +242,48 @@ def write_changes(request: WriteRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/settings")
-def get_settings():
+def get_settings(project_path: Optional[str] = None, db: Session = Depends(get_db)):
+    # 1. Try to load from Project DB
+    if project_path:
+        state = db.query(ProjectState).filter(ProjectState.project_path == project_path).first()
+        if state and state.settings_json:
+            try:
+                return json.loads(state.settings_json)
+            except:
+                pass
+
+    # 2. Fallback to Global Settings (file-based)
     return settings_service.get_defaults()
 
+class SettingsUpdate(BaseModel):
+    project_path: Optional[str] = None
+    settings: Dict[str, Any]
+
 @app.post("/api/settings")
-def update_settings(defaults: Dict[str, Any]):
-    settings_service.save(defaults)
+def update_settings(update: SettingsUpdate, db: Session = Depends(get_db)):
+    # If project specific
+    if update.project_path:
+        state = db.query(ProjectState).filter(ProjectState.project_path == update.project_path).first()
+        settings_str = json.dumps(update.settings)
+        timestamp = datetime.datetime.now().isoformat()
+        
+        if state:
+            state.settings_json = settings_str
+        else:
+            # Create new state if doesn't exist (though usually it should for a valid project)
+            state = ProjectState(project_path=update.project_path, tags_json="[]", settings_json=settings_str, updated_at=timestamp)
+            db.add(state)
+        
+        db.commit()
+        return {"status": "saved", "scope": "project"}
+
+    # Fallback to Global
+    settings_service.save(update.settings)
+    
+    # Refresh Scanner if root path changed
+    if "scada_root_path" in update.settings:
+        scanner.root_path = update.settings["scada_root_path"]
+        
     return {"status": "success"}
 
 class ImportRequest(BaseModel):
@@ -189,6 +300,33 @@ def import_project(request: ImportRequest):
 @app.get("/")
 def read_root():
     return {"message": "PlantSCADA Tag Manager API is running"}
+
+class StateRequest(BaseModel):
+    project_path: str
+    tags: List[Dict[str, Any]]
+
+@app.get("/api/state")
+def get_project_state(path: str, db: Session = Depends(get_db)):
+    state = db.query(ProjectState).filter(ProjectState.project_path == path).first()
+    if not state:
+        return {"found": False}
+    return {"found": True, "tags": json.loads(state.tags_json), "updated_at": state.updated_at}
+
+@app.post("/api/state")
+def save_project_state(request: StateRequest, db: Session = Depends(get_db)):
+    state = db.query(ProjectState).filter(ProjectState.project_path == request.project_path).first()
+    timestamp = datetime.datetime.now().isoformat()
+    tags_str = json.dumps(request.tags)
+    
+    if state:
+        state.tags_json = tags_str
+        state.updated_at = timestamp
+    else:
+        state = ProjectState(project_path=request.project_path, tags_json=tags_str, updated_at=timestamp)
+        db.add(state)
+    
+    db.commit()
+    return {"status": "saved", "timestamp": timestamp}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
