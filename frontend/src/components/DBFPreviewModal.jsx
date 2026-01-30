@@ -37,7 +37,7 @@ const DBFPreviewModal = ({ isOpen, onClose, diff }) => {
         variable: [
             'NAME', 'TYPE', 'UNIT', 'ADDR', 'RAW_ZERO', 'RAW_FULL', 'ENG_ZERO', 'ENG_FULL', 'ENG_UNITS', 'FORMAT', 'COMMENT',
             'CLUSTER', 'EQUIP', 'ITEM', 'TAGGENLINK', 'LINKED', 'EDITCODE', 'HISTORIAN', 'CUSTOM1', 'CUSTOM2', 'CUSTOM3', 'CUSTOM4',
-            'CUSTOM5', 'CUSTOM6', 'CUSTOM7', 'CUSTOM8', 'GUID'
+            'CUSTOM5', 'CUSTOM6', 'CUSTOM7', 'CUSTOM8', 'WRITEROLES', 'GUID'
         ],
         trend: [
             'NAME', 'EXPR', 'TRIG', 'SAMPLEPER', 'PRIV', 'AREA', 'ENG_UNITS', 'FORMAT', 'FILENAME', 'FILES', 'TIME', 'PERIOD',

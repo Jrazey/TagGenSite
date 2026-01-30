@@ -184,15 +184,15 @@ def generate_tags(request: GenerateRequest, db: Session = Depends(get_db)):
     
     # Check variable.dbf
     var_dbf = scanner.get_dbf_path(request.project_path, "variable.dbf")
-    diffs["variable"] = dbf_writer.reconcile_changes(expanded["variable"], var_dbf, key_field="NAME")
+    diffs["variable"] = dbf_writer.reconcile_changes(expanded["variable"], var_dbf, key_field="NAME", enable_guid=True)
     
     # Check trend.dbf
     trend_dbf = scanner.get_dbf_path(request.project_path, "trend.dbf")
-    diffs["trend"] = dbf_writer.reconcile_changes(expanded["trend"], trend_dbf, key_field="NAME")
+    diffs["trend"] = dbf_writer.reconcile_changes(expanded["trend"], trend_dbf, key_field="NAME", enable_guid=False)
     
     # Check digalm.dbf
     digalm_dbf = scanner.get_dbf_path(request.project_path, "digalm.dbf")
-    diffs["digalm"] = dbf_writer.reconcile_changes(expanded["digalm"], digalm_dbf, key_field="TAG")
+    diffs["digalm"] = dbf_writer.reconcile_changes(expanded["digalm"], digalm_dbf, key_field="TAG", enable_guid=False)
     
     return {"diff": diffs}
 

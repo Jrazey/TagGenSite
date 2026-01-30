@@ -1,4 +1,5 @@
-﻿LW_Sub1_ProdTrip,LW_Sub1_ProdTrip,Conveyor Tripped,LW_Sub1_ProdTrip,NOT LW_Sub1_OOS,Alm_Prod,LW_Sub1_Power,Priv_Alarm,Area_LW_Sub1,Conveyor Tripped,,,LW903 Sub1,,,,,,,,LW1_Cl,,,,,,LW1.Sub1,,
+﻿TAG,NAME,DESC,VAR_A,VAR_B,CATEGORY,HELP,PRIV,AREA,COMMENT,SEQUENCE,DELAY,CUSTOM1,CUSTOM2,CUSTOM3,CUSTOM4,CUSTOM5,CUSTOM6,CUSTOM7,CUSTOM8,CLUSTER,TAGGENLINK,PAGING,PAGINGGRP,EDITCODE,LINKED,EQUIP,ITEM,HISTORIAN
+LW_Sub1_ProdTrip,LW_Sub1_ProdTrip,Conveyor Tripped,LW_Sub1_ProdTrip,NOT LW_Sub1_OOS,Alm_Prod,LW_Sub1_Power,Priv_Alarm,Area_LW_Sub1,Conveyor Tripped,,,LW903 Sub1,,,,,,,,LW1_Cl,,,,,,LW1.Sub1,,
 LW_Sub1_Reset_C,LW_Sub1_Reset_C,SCADA Reset Command,LW_Sub1_Reset_C,NOT LW_Sub1_OOS,Alm_Event,LW_Sub1_Power,Priv_Alarm,Area_LW_Sub1,SCADA Reset Command,,,LW903 Sub1,,,,,,,,LW1_Cl,,,,,,LW1.Sub1,,
 LW_Sub1_ResetPB,LW_Sub1_ResetPB,Local Reset Push Button,LW_Sub1_ResetPB,NOT LW_Sub1_OOS,Alm_Event,LW_Sub1_Power,Priv_Alarm,Area_LW_Sub1,Local Reset Push Button,,,LW903 Sub1,,,,,,,,LW1_Cl,,,,,,LW1.Sub1,,
 LW_Sub1_Transformer_LTDoorLimits_SR_t,LW_Sub1_Transformer_LTDoorLimits_SR_t,Transformer LT Door Limits Safety Relay Trip,LW_Sub1_Transformer_LTDoorLimits_SR_t,NOT LW_Sub1_OOS,Alm_Trip,LW_Sub1_Power,Priv_Alarm,Area_LW_Sub1,Transformer LT Door Limits Safety Relay Trip,,,LW903 Sub1,,,,,,,,LW1_Cl,,,,,,LW1.Sub1,,

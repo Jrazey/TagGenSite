@@ -1,4 +1,5 @@
-﻿LW_Sub1_ProdTrip,LW_Sub1_ProdTrip,,1,,,,,[DATA]:Trends\LW_Sub1\LW_Sub1_ProdTrip\LW_Sub1_ProdTrip,25,0,Saturday,LW903 Sub1 - Conveyor Tripped,TRN_PERIODIC,,,,,,,,Scaled (2-byte samples),LW1_Cl,,,,,LW1.Sub1,,,,
+﻿NAME,EXPR,TRIG,SAMPLEPER,PRIV,AREA,ENG_UNITS,FORMAT,FILENAME,FILES,TIME,PERIOD,COMMENT,TYPE,SPCFLAG,LSL,USL,SUBGRPSIZE,XDOUBLEBAR,RANGE,SDEVIATION,STORMETHOD,CLUSTER,TAGGENLINK,EDITCODE,LINKED,DEADBAND,EQUIP,ITEM,HISTORIAN,ENG_ZERO,ENG_FULL
+LW_Sub1_ProdTrip,LW_Sub1_ProdTrip,,1,,,,,[DATA]:Trends\LW_Sub1\LW_Sub1_ProdTrip\LW_Sub1_ProdTrip,25,0,Saturday,LW903 Sub1 - Conveyor Tripped,TRN_PERIODIC,,,,,,,,Scaled (2-byte samples),LW1_Cl,,,,,LW1.Sub1,,,,
 LW_Sub1_TripOK,LW_Sub1_TripOK,,1,,,,,[DATA]:Trends\LW_Sub1\LW_Sub1_TripOK\LW_Sub1_TripOK,25,0,Saturday,LW903 Sub1 - Trips Healthy,TRN_PERIODIC,,,,,,,,Scaled (2-byte samples),LW1_Cl,,,,,LW1.Sub1,,,,
 LW_Sub1_WarnOK,LW_Sub1_WarnOK,,1,,,,,[DATA]:Trends\LW_Sub1\LW_Sub1_WarnOK\LW_Sub1_WarnOK,25,0,Saturday,LW903 Sub1 - Warnings Healthy,TRN_PERIODIC,,,,,,,,Scaled (2-byte samples),LW1_Cl,,,,,LW1.Sub1,,,,
 LW_Sub1_InterlockOK,LW_Sub1_InterlockOK,,1,,,,,[DATA]:Trends\LW_Sub1\LW_Sub1_InterlockOK\LW_Sub1_InterlockOK,25,0,Saturday,LW903 Sub1 - Interlocks Healthy,TRN_PERIODIC,,,,,,,,Scaled (2-byte samples),LW1_Cl,,,,,LW1.Sub1,,,,

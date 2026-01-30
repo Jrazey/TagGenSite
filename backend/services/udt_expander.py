@@ -106,7 +106,10 @@ class UDTExpander:
                     "ENG_UNITS": entry.get("engUnits", ""),
                     "FORMAT": "",
                     "ENG_ZERO": entry.get("engZero", ""),
-                    "ENG_FULL": entry.get("engFull", "")
+                    "ENG_FULL": entry.get("engFull", ""),
+                    "WRITEROLES": "",
+                    "CUSTOM1": "", "CUSTOM2": "", "CUSTOM3": "", "CUSTOM4": "",
+                    "CUSTOM5": "", "CUSTOM6": "", "CUSTOM7": "", "CUSTOM8": ""
                 }
                 output["variable"].append(var_rec)
                 
@@ -131,8 +134,8 @@ class UDTExpander:
                 # Group D
                 if parent_alarms_enabled:
                     alm_rec = {
-                        "TAG": entry.get("alarmName", f"{base_name}_Alm"),
-                        "NAME": entry.get("alarmName", f"{base_name}_Alm"),
+                        "TAG": entry.get("alarmName", base_name),
+                        "NAME": entry.get("alarmName", base_name),
                         "DESC": entry.get("alarmHelp", ""), 
                         "VAR_A": base_name,
                         "CATEGORY": entry.get("alarmCategory", "1"),
@@ -202,6 +205,9 @@ class UDTExpander:
                         "FORMAT": member.get("format", ""),
                         "ENG_ZERO": member.get("engZero", ""),
                         "ENG_FULL": member.get("engFull", ""),
+                        "WRITEROLES": "",
+                        "CUSTOM1": "", "CUSTOM2": "", "CUSTOM3": "", "CUSTOM4": "",
+                        "CUSTOM5": "", "CUSTOM6": "", "CUSTOM7": "", "CUSTOM8": "",
 
                         "_tag_type": member['type'], 
                         
@@ -214,7 +220,7 @@ class UDTExpander:
                         "isTrend": member.get("is_trend", False) and parent_trends_enabled,
 
                         # Alarm Attributes mapping
-                        "alarmName": f"{tag_name}_Alm",
+                        "alarmName": tag_name,
                         "alarmCategory": member.get("alarm_category", "1"),
                         "alarmPriority": member.get("alarm_priority", "1"),
                         "alarmHelp": member.get("alarm_help", ""),
@@ -246,8 +252,8 @@ class UDTExpander:
                     # Logic: Member.hasAlarm AND Parent.isAlarm
                     if member.get("is_alarm") and parent_alarms_enabled:
                          alm_rec = {
-                            "TAG": f"{tag_name}_Alm",
-                            "NAME": f"{tag_name}_Alm",
+                            "TAG": tag_name,
+                            "NAME": tag_name,
                             "DESC": member.get("alarm_help", tag_desc),
                             "VAR_A": tag_name,
                             "CATEGORY": member.get("alarm_category", "1"),

@@ -45,7 +45,7 @@ class DBFWriter:
     def generate_guid(self) -> str:
         return str(uuid.uuid4())
 
-    def reconcile_changes(self, staging_data: List[Dict], existing_dbf_path: str, key_field: str = "NAME") -> Dict[str, List]:
+    def reconcile_changes(self, staging_data: List[Dict], existing_dbf_path: str, key_field: str = "NAME", enable_guid: bool = True) -> Dict[str, List]:
         """
         Compares staging data against an existing DBF.
         """
@@ -78,14 +78,18 @@ class DBFWriter:
             key = record.get(key_field)
             
             # --- GUID LOGIC ---
-            if key in existing_records:
-                existing_rec = existing_records[key]
-                existing_guid = existing_rec.get('GUID') or existing_rec.get('OID') 
-                
-                if existing_guid:
-                    record['GUID'] = existing_guid
+            if enable_guid:
+                if key in existing_records:
+                    existing_rec = existing_records[key]
+                    existing_guid = existing_rec.get('GUID') or existing_rec.get('OID') 
+                    
+                    if existing_guid:
+                        record['GUID'] = existing_guid
+                    elif 'GUID' not in record:
+                         record['GUID'] = self.generate_guid()
                 elif 'GUID' not in record:
-                     record['GUID'] = self.generate_guid()
+                    # New Record needs GUID if enabled
+                    record['GUID'] = self.generate_guid()
 
                 # --- MODIFICATION CHECK ---
                 is_modified = False
@@ -104,7 +108,7 @@ class DBFWriter:
                     diff["unchanged"].append(record)
             else:
                 # --- NEW RECORD ---
-                if 'GUID' not in record:
+                if enable_guid and 'GUID' not in record:
                     record['GUID'] = self.generate_guid()
                 diff["new"].append(record)
         
