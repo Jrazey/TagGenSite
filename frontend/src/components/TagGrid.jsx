@@ -1,14 +1,16 @@
 
 import React, { useState, useMemo, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { useReactTable, getCoreRowModel, getExpandedRowModel, flexRender } from '@tanstack/react-table';
+import { useReactTable, getCoreRowModel, getExpandedRowModel, getSortedRowModel, getFilteredRowModel, flexRender } from '@tanstack/react-table';
 import axios from 'axios';
-import { ChevronRight, ChevronDown, Plus, Lock, Unlock } from 'lucide-react';
+import { ChevronRight, ChevronDown, Plus, Lock, Unlock, ArrowUpDown, Search } from 'lucide-react';
 import TagDetailModal from './TagDetailModal';
 
 const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
     const [data, setData] = useState([]);
     const [expanded, setExpanded] = useState({});
     const [isLocked, setIsLocked] = useState({});
+    const [sorting, setSorting] = useState([]);
+    const [columnFilters, setColumnFilters] = useState([]);
 
     // Modal State
     const [editingRowIndex, setEditingRowIndex] = useState(null);
@@ -286,6 +288,9 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
             } else {
                 row.type = 'udt';
                 row.udt_type = newType;
+                // Auto-enable Trend and Alarm for UDTs by default
+                row.isTrend = true;
+                row.isAlarm = true;
                 row.subRows = []; // Clear to force re-expansion with new template
             }
 
@@ -454,10 +459,14 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                             <input
                                 value={getValue()}
                                 onChange={(e) => handleAddressChange(row.index, e.target.value, row.original.name, row.original.id, row.original.type)}
+                                style={{
+                                    border: '1px solid var(--accent-color)',
+                                    backgroundColor: 'rgba(0, 255, 127, 0.05)'
+                                }}
                             />
                     ),
                     size: 120,
-                    meta: { isSticky: true, left: 330 }
+                    meta: { isSticky: true, left: 330, headerStyle: { color: 'var(--accent-color)' } }
                 },
                 {
                     accessorKey: 'citectName',
@@ -488,7 +497,15 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                     cell: ({ getValue, row }) => {
                         if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
                         return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'dataType', e.target.value)} />
+                            <select
+                                value={getValue()}
+                                onChange={(e) => handleFieldChange(row.index, 'dataType', e.target.value)}
+                                style={{ width: '100%', background: 'transparent', color: 'inherit', border: 'none' }}
+                            >
+                                {['BCD', 'BYTE', 'DIGITAL', 'INT', 'LONG', 'LONGBCD', 'REAL', 'STRING', 'UINT', 'ULONG'].map(t => (
+                                    <option key={t} value={t}>{t}</option>
+                                ))}
+                            </select>
                     },
                     size: 80
                 },
@@ -555,7 +572,6 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                     id: 'isTrend',
                     header: 'Trend?',
                     cell: ({ row }) => {
-                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
                         return <input
                             type="checkbox"
                             checked={row.original.isTrend || false}
@@ -587,7 +603,17 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                         if (row.original.type === 'child' && !row.original.isTrend) return null;
 
                         return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, 'trendType', e.target.value)} disabled={!row.original.isTrend} />
+                            <select
+                                value={getValue() || ''}
+                                onChange={(e) => handleFieldChange(row.index, 'trendType', e.target.value)}
+                                disabled={!row.original.isTrend}
+                                style={{ width: '100%', background: 'transparent', color: 'inherit', border: 'none' }}
+                            >
+                                <option value="">Select...</option>
+                                {['TRN_PERIODIC', 'TRN_EVENT', 'TRN_PERIODIC_EVENT'].map(t => (
+                                    <option key={t} value={t}>{t}</option>
+                                ))}
+                            </select>
                     },
                     size: 120
                 },
@@ -616,7 +642,6 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                     id: 'isAlarm',
                     header: 'Alarm?',
                     cell: ({ row }) => {
-                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
                         return <input
                             type="checkbox"
                             checked={row.original.isAlarm || false}
@@ -685,10 +710,14 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
         columns,
         state: { expanded },
         onExpandedChange: setExpanded,
+        onSortingChange: setSorting,
+        onColumnFiltersChange: setColumnFilters,
         getRowId: (row, index, parent) => parent ? `${parent.id}.${index}` : index.toString(),
         getSubRows: row => row.subRows,
         getCoreRowModel: getCoreRowModel(),
         getExpandedRowModel: getExpandedRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        getFilteredRowModel: getFilteredRowModel(),
         getRowCanExpand: row => row.original.type === 'udt' || (row.subRows && row.subRows.length > 0),
         autoResetExpanded: false,
     });
@@ -739,7 +768,35 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                                         }}
                                         className={`${header.column.columnDef.meta?.headerClass || ''} ${isSep ? 'group-separator-right' : ''}`}
                                     >
-                                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                            <div
+                                                onClick={header.column.getToggleSortingHandler()}
+                                                style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', justifyContent: 'space-between' }}
+                                            >
+                                                {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                                {header.column.getCanSort() && <ArrowUpDown size={12} style={{ opacity: 0.5 }} />}
+                                            </div>
+                                            {/* Filters */}
+                                            {['citectName', 'address', 'udt_type'].includes(header.column.id) && (
+                                                <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 4, padding: '2px 4px' }}>
+                                                    <Search size={10} style={{ marginRight: 4, opacity: 0.5 }} />
+                                                    <input
+                                                        value={header.column.getFilterValue() || ''}
+                                                        onChange={e => header.column.setFilterValue(e.target.value)}
+                                                        placeholder="Filter..."
+                                                        style={{
+                                                            background: 'transparent',
+                                                            border: 'none',
+                                                            color: 'inherit',
+                                                            fontSize: '0.8em',
+                                                            width: '100%',
+                                                            outline: 'none'
+                                                        }}
+                                                        onClick={e => e.stopPropagation()}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
                                     </th>
                                 );
                             })}

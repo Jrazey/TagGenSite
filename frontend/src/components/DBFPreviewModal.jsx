@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { X, Copy } from 'lucide-react';
+import { X, Copy, Download } from 'lucide-react';
 
 const DBFPreviewModal = ({ isOpen, onClose, diff }) => {
     if (!isOpen || !diff) return null;
@@ -79,6 +79,23 @@ const DBFPreviewModal = ({ isOpen, onClose, diff }) => {
         alert("Copied to clipboard!");
     };
 
+    const downloadCSV = () => {
+        const header = columns.join(',');
+        const rows = activeData.map(row => columns.map(c => {
+            let val = row[c] || '';
+            val = String(val).replace(/"/g, '""'); // Escape quotes
+            return `"${val}"`;
+        }).join(',')).join('\n');
+
+        const blob = new Blob([header + '\n' + rows], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${activeTab}.csv`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+    };
+
     const tabStyle = (id) => ({
         padding: '8px 16px',
         cursor: 'pointer',
@@ -102,6 +119,7 @@ const DBFPreviewModal = ({ isOpen, onClose, diff }) => {
                 <div style={{ padding: '16px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3>Raw DBF Preview</h3>
                     <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={downloadCSV} title="Export CSV"><Download size={16} /> Export</button>
                         <button onClick={copyToClipboard} title="Copy Table"><Copy size={16} /> Copy</button>
                         <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white' }}><X size={24} /></button>
                     </div>
