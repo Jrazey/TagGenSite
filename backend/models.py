@@ -76,13 +76,26 @@ class TagEntry(Base):
     trend_sample_per = Column(String, default="") # SAMPLEPER
     trend_priv = Column(String, default="")     # PRIV
     trend_area = Column(String, default="")     # AREA
-    # trend_eng_units/format/comment etc usually inherit from Var but strict schema might need them separate
+    trend_eng_units = Column(String, default="")
+    trend_format = Column(String, default="")
+    trend_comment = Column(String, default="")
+    trend_eng_zero = Column(String, default="")
+    trend_eng_full = Column(String, default="")
+    trend_cluster = Column(String, default="")
+    trend_taggenlink = Column(String, default="")
+    trend_editcode = Column(String, default="")
+    trend_linked = Column(String, default="")
+    trend_deadband = Column(String, default="")
+    trend_equip = Column(String, default="")
+    trend_item = Column(String, default="")
+    trend_historian = Column(String, default="")
     
     trend_filename = Column(String, default="") # FILENAME
     trend_files = Column(String, default="")    # FILES
     trend_time = Column(String, default="")     # TIME
     trend_period = Column(String, default="")   # PERIOD
     trend_type = Column(String, default="")     # TYPE (TRN_PERIODIC etc)
+    trend_period_rec = Column(String, default="")# PERIOD (recording interval, distinct from sample?)
     trend_spcflag = Column(String, default="")  # SPCFLAG
     trend_lsl = Column(String, default="")      # LSL
     trend_usl = Column(String, default="")      # USL
@@ -90,7 +103,7 @@ class TagEntry(Base):
     trend_xdoublebar = Column(String, default="") # XDOUBLEBAR
     trend_range = Column(String, default="")    # RANGE
     trend_sdeviation = Column(String, default="") # SDEVIATION
-    trend_stormethod = Column(String, default="") # STORMETHOD
+    trend_storage = Column(String, default="") # STORMETHOD
     
     # --- ALARM SPECIFIC (dbf: digalm.dbf / anaalm etc - assuming DigAlm for now) ---
     is_alarm = Column(Boolean, default=False)   # Master switch for Alarm generation
@@ -106,9 +119,29 @@ class TagEntry(Base):
     alarm_area = Column(String, default="")     # AREA
     # alarm_comment
     alarm_sequence = Column(String, default="") # SEQUENCE
-    alarm_delay = Column(String, default="")    # DELAY
+    alarm_priority = Column(String, default="") # PRIORITY
+    alarm_delay = Column(String, default="")    # DELAY    # DELAY
     alarm_paging = Column(String, default="")   # PAGING
     alarm_paginggrp = Column(String, default="")# PAGINGGRP
+    
+    alarm_comment = Column(String, default="")
+    alarm_cluster = Column(String, default="")
+    alarm_taggenlink = Column(String, default="")
+    alarm_editcode = Column(String, default="")
+    alarm_linked = Column(String, default="")
+    alarm_equip = Column(String, default="")
+    alarm_item = Column(String, default="")
+    alarm_historian = Column(String, default="")
+    
+    # Alarm Custom
+    alarm_custom1 = Column(String, default="")
+    alarm_custom2 = Column(String, default="")
+    alarm_custom3 = Column(String, default="")
+    alarm_custom4 = Column(String, default="")
+    alarm_custom5 = Column(String, default="")
+    alarm_custom6 = Column(String, default="")
+    alarm_custom7 = Column(String, default="")
+    alarm_custom8 = Column(String, default="")
 
 class ProjectState(Base):
     __tablename__ = "project_states"
@@ -124,3 +157,4 @@ class UdtTemplate(Base):
     name = Column(String, primary_key=True, index=True)
     description = Column(String, default="")
     members_json = Column(String) # JSON list of members
+

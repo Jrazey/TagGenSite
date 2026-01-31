@@ -331,18 +331,11 @@ def save_tags_db(request: SaveTagsRequest, db: Session = Depends(get_db)):
             is_expanded = t.get("is_expanded", False),
             
             # Identity
-            name = g("citectName") or g("name"), # Prefix in Grid is 'name' for UDT, 'citectName' for single? 
-            # In TagGrid: 
-            # Single: name='FIT101_PV' (citectName), prefix is derived?
-            # 'citectName' is the main edited "Tag Name".
-            # 'name' is "Prefix" for UDTs.
-            # We should probably store both or decide mapping.
-            # TagEntry.name maps to VARIABLE.NAME. 
-            # For UDT Instance, Name is the Instance Prefix.
+            name = g("citectName") or g("name"), 
             
             cluster = g("cluster"),
-            type = g("udt_type") if etype == "udt_instance" else g("dataType"), # DBF TYPE vs UDT Type
-            description = g("description"),
+            type = g("udt_type") if etype == "udt_instance" else (g("dataType") or g("type") or g("TYPE")),
+            description = g("description") or g("comment") or g("COMMENT"),
             equipment = g("equipment"),
             item = g("item"),
             
@@ -355,11 +348,15 @@ def save_tags_db(request: SaveTagsRequest, db: Session = Depends(get_db)):
             var_format = g("format") or g("var_format"),
             
             # Variable Advanced
-            var_raw_zero = g("rawZero"), var_raw_full = g("rawFull"),
-            editcode = g("editCode"), linked = g("linked"), oid = g("oid"),
+            var_raw_zero = g("rawZero") or g("var_raw_zero"),
+            var_raw_full = g("rawFull") or g("var_raw_full"),
+            editcode = g("editCode") or g("editcode"), 
+            linked = g("linked"), oid = g("oid"),
             ref1 = g("ref1"), ref2 = g("ref2"), deadband = g("deadband"),
-            custom = g("custom"), taggenlink = g("tagGenLink"), historian = g("historian"),
-            write_roles = g("writeRoles"), guid = g("guid"),
+            custom = g("custom"), taggenlink = g("tagGenLink") or g("taggenlink"), 
+            historian = g("historian"),
+            write_roles = g("writeRoles") or g("write_roles"), 
+            guid = g("guid"),
             
             # Custom
             custom1 = g("custom1"), custom2 = g("custom2"), custom3 = g("custom3"),
@@ -369,34 +366,55 @@ def save_tags_db(request: SaveTagsRequest, db: Session = Depends(get_db)):
             # Trend
             is_trend = t.get("isTrend", False) or t.get("is_trend", False),
             trend_name = g("trendName") or g("trend_name"),
-            trend_expr = g("trend_expr"), # Added in update
+            trend_expr = g("trend_expr"),
             trend_sample_per = g("samplePeriod") or g("trend_sample_per"),
             trend_type = g("trendType") or g("trend_type"),
             trend_filename = g("trendFilename") or g("trend_filename"),
-            trend_storage = g("trendStorage") or g("trend_storage"),
+            trend_storage = g("trendStorage") or g("trend_storage") or g("trend_stormethod"),
             trend_files = g("trendFiles") or g("trend_files"),
             
-            # Advanced Trend (from recent grid update)
+            # Advanced Trend
             trend_trig = g("trend_trig"), trend_priv = g("trend_priv"), trend_area = g("trend_area"),
-            # trend_time... etc if added
+            trend_time = g("trend_time"), trend_period_rec = g("trend_period_rec") or g("trend_period"),
+            
+            trend_eng_units = g("trend_eng_units"), trend_format = g("trend_format"),
+            trend_eng_zero = g("trend_eng_zero"), trend_eng_full = g("trend_eng_full"),
+            trend_comment = g("trend_comment"), trend_cluster = g("trend_cluster"),
+            trend_taggenlink = g("trend_taggenlink"), trend_editcode = g("trend_editcode"),
+            trend_linked = g("trend_linked"), trend_deadband = g("trend_deadband"),
+            trend_equip = g("trend_equip"), trend_item = g("trend_item"),
+            trend_historian = g("trend_historian"),
+
+            trend_spcflag = g("trend_spcflag"), 
+            trend_lsl = g("trend_lsl"), trend_usl = g("trend_usl"),
+            trend_subgrpsize = g("trend_subgrpsize"), trend_xdoublebar = g("trend_xdoublebar"),
+            trend_range = g("trend_range"), trend_sdeviation = g("trend_sdeviation"),
             
             # Alarm
             is_alarm = t.get("isAlarm", False) or t.get("is_alarm", False),
-            alarm_tag = g("alarm_tag") or g("alarmTag"), # Grid accessor was alarm_tag logic?
-            # Grid accessor: alarm_tag.
-            
-            alarm_name = g("alarmName") or g("alarm_name"), # Grid uses alarm_tag mostly for TAG 
-            # DBF: 'TAG' is key. 'NAME' is redundant? TagGrid uses 'alarm_tag'. 
-            # TagEntry.alarm_tag matches DBF TAG.
-            
+            alarm_tag = g("alarm_tag") or g("alarmTag"), 
+            alarm_name = g("alarmName") or g("alarm_name"), 
             alarm_desc = g("alarm_desc"),
+            alarm_var_a = g("alarm_var_a"),
+            alarm_var_b = g("alarm_var_b"),
             alarm_category = g("alarmCategory") or g("alarm_category"),
             alarm_help = g("alarm_help") or g("alarmHelp"),
             alarm_area = g("alarm_area") or g("alarmArea"),
             alarm_priv = g("alarm_priv"),
+            alarm_priority = g("alarm_priority"),
             alarm_delay = g("alarm_delay"),
+            alarm_paging = g("alarm_paging"),
+            alarm_paginggrp = g("alarm_paginggrp"),
             
-            # Paging?
+            alarm_comment = g("alarm_comment"), alarm_cluster = g("alarm_cluster"),
+            alarm_taggenlink = g("alarm_taggenlink"), alarm_editcode = g("alarm_editcode"),
+            alarm_linked = g("alarm_linked"), alarm_equip = g("alarm_equip"),
+            alarm_item = g("alarm_item"), alarm_historian = g("alarm_historian"),
+            
+            alarm_custom1 = g("alarm_custom1"), alarm_custom2 = g("alarm_custom2"),
+            alarm_custom3 = g("alarm_custom3"), alarm_custom4 = g("alarm_custom4"),
+            alarm_custom5 = g("alarm_custom5"), alarm_custom6 = g("alarm_custom6"),
+            alarm_custom7 = g("alarm_custom7"), alarm_custom8 = g("alarm_custom8")
         )
         new_entries.append(entry)
         
@@ -450,8 +468,16 @@ def get_project_state(path: str, db: Session = Depends(get_db)):
                 "item": e.item,
                 
                 # Advanced Var
-                "rawZero": e.var_raw_zero, "rawFull": e.var_raw_full,
-                "editCode": e.editcode, "linked": e.linked, "oid": e.oid,
+                "rawZero": e.var_raw_zero, "var_raw_zero": e.var_raw_zero,
+                "rawFull": e.var_raw_full, "var_raw_full": e.var_raw_full,
+                "editCode": e.editcode, "editcode": e.editcode,
+                "linked": e.linked, "oid": e.oid,
+                "ref1": e.ref1, "ref2": e.ref2, "deadband": e.deadband,
+                "custom": e.custom, "taggenlink": e.taggenlink, "historian": e.historian,
+                
+                "custom1": e.custom1, "custom2": e.custom2, "custom3": e.custom3, "custom4": e.custom4,
+                "custom5": e.custom5, "custom6": e.custom6, "custom7": e.custom7, "custom8": e.custom8,
+
                 "guid": e.guid, "writeRoles": e.write_roles,
                 
                 # Trend
@@ -460,8 +486,24 @@ def get_project_state(path: str, db: Session = Depends(get_db)):
                 "samplePeriod": e.trend_sample_per, "trend_sample_per": e.trend_sample_per,
                 "trendType": e.trend_type, "trend_type": e.trend_type,
                 "trendFilename": e.trend_filename, "trend_filename": e.trend_filename,
+                "trendFiles": e.trend_files, "trend_files": e.trend_files,
                 "trend_expr": e.trend_expr,
-                "trend_storage": e.trend_storage,
+                "trendStorage": e.trend_storage, "trend_storage": e.trend_storage, "trend_stormethod": e.trend_storage,
+                "trend_trig": e.trend_trig, "trend_priv": e.trend_priv, "trend_area": e.trend_area,
+                "trend_time": e.trend_time, "trend_period": e.trend_period_rec, 
+                "trend_period_rec": e.trend_period_rec,
+                
+                "trend_eng_units": e.trend_eng_units, "trend_format": e.trend_format,
+                "trend_eng_zero": e.trend_eng_zero, "trend_eng_full": e.trend_eng_full,
+                "trend_comment": e.trend_comment, "trend_cluster": e.trend_cluster,
+                "trend_taggenlink": e.trend_taggenlink, "trend_editcode": e.trend_editcode,
+                "trend_linked": e.trend_linked, "trend_deadband": e.trend_deadband,
+                "trend_equip": e.trend_equip, "trend_item": e.trend_item,
+                "trend_historian": e.trend_historian,
+                
+                "trend_spcflag": e.trend_spcflag, "trend_lsl": e.trend_lsl, "trend_usl": e.trend_usl,
+                "trend_subgrpsize": e.trend_subgrpsize, "trend_xdoublebar": e.trend_xdoublebar,
+                "trend_range": e.trend_range, "trend_sdeviation": e.trend_sdeviation,
                 
                 # Alarm
                 "isAlarm": e.is_alarm, "is_alarm": e.is_alarm,
@@ -470,7 +512,22 @@ def get_project_state(path: str, db: Session = Depends(get_db)):
                 "alarmCategory": e.alarm_category, "alarm_category": e.alarm_category,
                 "alarm_desc": e.alarm_desc,
                 "alarm_help": e.alarm_help, "alarm_area": e.alarm_area,
-                "alarm_delay": e.alarm_delay, "alarm_priv": e.alarm_priv
+                "alarm_delay": e.alarm_delay, "alarm_priv": e.alarm_priv,
+                "alarm_var_a": e.alarm_var_a, "alarm_var_b": e.alarm_var_b,
+                "alarm_priority": e.alarm_priority,
+                "alarm_var_a": e.alarm_var_a, "alarm_var_b": e.alarm_var_b,
+                "alarm_priority": e.alarm_priority,
+                "alarm_paging": e.alarm_paging, "alarm_paginggrp": e.alarm_paginggrp,
+                
+                "alarm_comment": e.alarm_comment, "alarm_cluster": e.alarm_cluster,
+                "alarm_taggenlink": e.alarm_taggenlink, "alarm_editcode": e.alarm_editcode,
+                "alarm_linked": e.alarm_linked, "alarm_equip": e.alarm_equip,
+                "alarm_item": e.alarm_item, "alarm_historian": e.alarm_historian,
+                
+                "alarm_custom1": e.alarm_custom1, "alarm_custom2": e.alarm_custom2,
+                "alarm_custom3": e.alarm_custom3, "alarm_custom4": e.alarm_custom4,
+                "alarm_custom5": e.alarm_custom5, "alarm_custom6": e.alarm_custom6,
+                "alarm_custom7": e.alarm_custom7, "alarm_custom8": e.alarm_custom8
             }
             tags.append(t)
         
@@ -487,3 +544,6 @@ def get_project_state(path: str, db: Session = Depends(get_db)):
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+
+
+

@@ -17,14 +17,9 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
             const newState = { ...prev, [field]: value };
 
             // Shared Name Sync
-            if (field === 'citectName') {
-                newState.trendName = value;
-                newState.alarmName = value; // Usually alarm tag = variable tag unless suffix is used
-                // But user asked for "Alarm Tag" to be shared. 
-                // If they meant the Alarm Name (Desc), that's different.
-                // Usually Alarm Tag = [Cluster]Prefix_Address_Alm or similar.
-                // But assuming User wants strictly "Variable Tag Name = Trend Tag Name = Alarm Tag"
-                // This implies the unique identifier key for the alarm record.
+            if (field === 'name') {
+                newState.trend_name = value;
+                newState.alarm_tag = value;
             }
             return newState;
         });
@@ -89,7 +84,7 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                 <div style={{ padding: '12px 20px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#2D2D30' }}>
                     <div>
                         <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: 4 }}>TAG CONFIGURATION</div>
-                        <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formData.citectName || formData.name || 'New Tag'}</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formData.name || 'New Tag'}</div>
                     </div>
                     <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer' }}><X size={24} /></button>
                 </div>
@@ -111,7 +106,7 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                         <div>
                             <div style={{ marginBottom: 24, borderBottom: '1px solid #333', paddingBottom: 16 }}>
                                 <div style={rowStyle}>
-                                    <Field label="Tag Name (Shared)" field="citectName" />
+                                    <Field label="Tag Name (Shared)" field="name" />
                                     <Field label="Cluster (Shared)" field="cluster" />
                                 </div>
                                 <div style={{ fontSize: '0.8rem', color: '#666', fontStyle: 'italic', marginBottom: 12 }}>
@@ -120,12 +115,12 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                             </div>
 
                             <div style={rowStyle}>
-                                <Field label="Project" field="projectName" />
+                                {/* Project is not in grid data usually, check if needed or remove. Keeping for now if passed. */}
                                 <Field label="Udt Type" field="udt_type" />
                             </div>
                             <div style={rowStyle}>
-                                <Field label="Comment (Trend)" field="trendComment" />
-                                <Field label="Comment (Alarm)" field="alarmComment" />
+                                <Field label="Comment (Trend)" field="trend_comment" />
+                                {/* Alarm comment not standard in simple schema, maybe alarm_desc? */}
                             </div>
                         </div>
                     )}
@@ -135,20 +130,20 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                         <>
                             {/* Removed Name & Cluster */}
                             <div style={rowStyle}>
-                                <Field label="Address" field="address" />
-                                <Field label="Data Type" field="dataType" />
-                                <Field label="I/O Device" field="ioDevice" />
+                                <Field label="Address" field="var_addr" />
+                                <Field label="Data Type" field="type" />
+                                <Field label="I/O Device" field="var_unit" />
                             </div>
                             <div style={rowStyle}>
-                                <Field label="Eng Units" field="engUnits" />
-                                <Field label="Format" field="format" />
+                                <Field label="Eng Units" field="var_eng_units" />
+                                <Field label="Format" field="var_format" />
                                 <Field label="Deadband" field="deadband" />
                             </div>
                             <div style={rowStyle}>
                                 <Field label="Raw Zero" field="rawZero" />
                                 <Field label="Raw Full" field="rawFull" />
-                                <Field label="Eng Zero" field="engZero" />
-                                <Field label="Eng Full" field="engFull" />
+                                <Field label="Eng Zero" field="var_eng_zero" />
+                                <Field label="Eng Full" field="var_eng_full" />
                             </div>
                             <div style={rowStyle}>
                                 <div style={{ flex: 1 }}>
@@ -186,22 +181,22 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                     {/* --- TREND TAB --- */}
                     {activeTab === 'trend' && (
                         <>
-                            <CheckField label="Enable Trending" field="isTrend" />
+                            <CheckField label="Enable Trending" field="is_trend" />
 
-                            {formData.isTrend ? (
+                            {formData.is_trend ? (
                                 <>
                                     {/* Removed Name, Cluster */}
                                     <div style={rowStyle}>
-                                        <Field label="Expression" field="trendExpression" />
-                                        <Field label="Trigger" field="trendTrigger" />
+                                        <Field label="Expression" field="trend_expr" />
+                                        <Field label="Trigger" field="trend_trig" />
                                     </div>
                                     <div style={rowStyle}>
-                                        <Field label="Sample Period" field="samplePeriod" />
-                                        <Field label="Type" field="trendType" />
+                                        <Field label="Sample Period" field="trend_sample_per" />
+                                        <Field label="Type" field="trend_type" />
                                     </div>
                                     <div style={rowStyle}>
-                                        <Field label="Privilege" field="trendPriv" />
-                                        <Field label="Area" field="trendArea" />
+                                        <Field label="Privilege" field="trend_priv" />
+                                        <Field label="Area" field="trend_area" />
                                     </div>
 
                                     <div style={{ borderTop: '1px solid #333', paddingTop: 16, marginTop: 8, marginBottom: 16 }}>
@@ -209,13 +204,13 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                                     </div>
 
                                     <div style={rowStyle}>
-                                        <Field label="File Name" field="trendFilename" />
-                                        <Field label="No. Files" field="trendFiles" />
-                                        <Field label="Time" field="trendTime" />
-                                        <Field label="Period" field="trendPeriod" />
+                                        <Field label="File Name" field="trend_filename" />
+                                        <Field label="No. Files" field="trend_files" />
+                                        <Field label="Time" field="trend_time" />
+                                        <Field label="Period" field="trend_period_rec" />
                                     </div>
                                     <div style={rowStyle}>
-                                        <Field label="Storage Method" field="trendStorage" />
+                                        <Field label="Storage Method" field="trend_storage" />
                                     </div>
                                 </>
                             ) : <div style={{ opacity: 0.5 }}>Check "Enable Trending" to configure.</div>}
@@ -225,29 +220,29 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                     {/* --- ALARM TAB --- */}
                     {activeTab === 'digalm' && (
                         <>
-                            <CheckField label="Enable Alarm" field="isAlarm" />
+                            <CheckField label="Enable Alarm" field="is_alarm" />
 
-                            {formData.isAlarm ? (
+                            {formData.is_alarm ? (
                                 <>
                                     {/* Removed TagName */}
                                     <div style={rowStyle}>
-                                        <Field label="Alarm Name (Desc)" field="alarmDesc" />
-                                        <Field label="Category" field="alarmCategory" />
+                                        <Field label="Alarm Name (Desc)" field="alarm_desc" />
+                                        <Field label="Category" field="alarm_category" />
                                     </div>
                                     <div style={rowStyle}>
-                                        <Field label="Var A" field="alarmVarA" />
-                                        <Field label="Var B" field="alarmVarB" />
-                                    </div>
-
-                                    <div style={rowStyle}>
-                                        <Field label="Priority" field="alarmPriority" />
-                                        <Field label="Area" field="alarmArea" />
-                                        <Field label="Privilege" field="alarmPriv" />
+                                        <Field label="Var A" field="alarm_var_a" />
+                                        <Field label="Var B" field="alarm_var_b" />
                                     </div>
 
                                     <div style={rowStyle}>
-                                        <Field label="Help Msg" field="alarmHelp" />
-                                        <Field label="Delay" field="alarmDelay" />
+                                        <Field label="Priority" field="alarm_priority" />
+                                        <Field label="Area" field="alarm_area" />
+                                        <Field label="Privilege" field="alarm_priv" />
+                                    </div>
+
+                                    <div style={rowStyle}>
+                                        <Field label="Help Msg" field="alarm_help" />
+                                        <Field label="Delay" field="alarm_delay" />
                                     </div>
                                 </>
                             ) : <div style={{ opacity: 0.5 }}>Check "Enable Alarm" to configure.</div>}
