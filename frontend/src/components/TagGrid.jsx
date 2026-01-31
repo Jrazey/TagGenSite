@@ -868,14 +868,17 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
             <div style={{ marginBottom: 8, display: 'flex', gap: 8 }}>
                 <button onClick={() => {
                     setData([{
-                        id: Date.now(), type: 'single',
+                        id: Date.now(),
+                        entry_type: 'single', // Explicitly set entry type
+                        type: defaults?.type || 'DIGITAL', // SCADA Data Type
                         cluster: defaults?.cluster || 'Cluster1',
                         io_device: defaults?.io_device || '',
                         udt_type: 'Single',
                         name: 'New_Tag',
-                        address: '', citectName: 'New_Tag',
+                        plc_addr: '',
+                        var_addr: '', // Ensure var_addr exists
+                        prefix: '',
                         isTrend: false, isAlarm: false,
-                        dataType: defaults?.dataType || 'DIGITAL',
                         engUnits: defaults?.engUnits || '',
                         engZero: defaults?.engZero || '',
                         engFull: defaults?.engFull || '',

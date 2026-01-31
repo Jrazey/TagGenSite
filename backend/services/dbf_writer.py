@@ -172,13 +172,17 @@ class DBFWriter:
                 rec_key = str(record[key_field]).strip()
                 if rec_key in mod_map:
                     changes = mod_map[rec_key]
-                    for k, v in changes.items():
-                        if k in field_names:
-                             # Safety check for field assignment
-                            try:
-                                record[k] = v
-                            except Exception as e:
-                                print(f"Warning: Failed to write {k}={v}: {e}")
+                    try:
+                        with record:
+                            for k, v in changes.items():
+                                if k in field_names:
+                                    # Safety check for field assignment
+                                    try:
+                                        record[k] = v
+                                    except Exception as e:
+                                        print(f"Warning: Failed to write {k}={v}: {e}")
+                    except Exception as e:
+                        print(f"Error accessing record context for {rec_key}: {e}")
         
         # 5. Process New (Append)
         for new_rec in diff["new"]:

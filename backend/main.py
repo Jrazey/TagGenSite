@@ -209,6 +209,11 @@ def expand_single_tag(tag: Dict[str, Any], db: Session = Depends(get_db)):
     
     # Return the dict directly - frontend expects { variable: [], trend: [], digalm: [] }
     return expanded
+class WriteRequest(BaseModel):
+    project_path: str
+    diff: Dict[str, Any]
+
+@app.post("/api/write")
 def write_changes(request: WriteRequest):
     """
     Commit changes to DBF files.
