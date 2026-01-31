@@ -2,6 +2,52 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Lock, Unlock } from 'lucide-react';
 
+// --- Form Components (Defined outside to prevent re-renders/focus loss) ---
+
+const Field = ({ label, field, data, onChange, placeholder, width }) => (
+    <div style={{ flex: width ? 'none' : 1, width: width, marginBottom: 12 }}>
+        <label style={{ display: 'block', marginBottom: 4, fontSize: '0.75rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</label>
+        <input
+            value={data[field] || ''}
+            onChange={e => onChange(field, e.target.value)}
+            placeholder={placeholder}
+            style={{
+                width: '100%', padding: 6, background: '#252526', border: '1px solid #3E3E42',
+                color: 'white', borderRadius: 2, fontSize: '0.9rem'
+            }}
+        />
+    </div>
+);
+
+const CheckField = ({ label, field, data, onChange }) => (
+    <div style={{ marginBottom: 16 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+            <input type="checkbox" checked={!!data[field]} onChange={e => onChange(field, e.target.checked)} />
+            <span style={{ fontWeight: 600, color: data[field] ? 'var(--accent-color)' : 'inherit' }}>{label}</span>
+        </label>
+    </div>
+);
+
+const SelectField = ({ label, field, data, onChange, options, width }) => (
+    <div style={{ flex: width ? 'none' : 1, width: width, marginBottom: 12 }}>
+        <label style={{ display: 'block', marginBottom: 4, fontSize: '0.75rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</label>
+        <select
+            value={data[field] || ''}
+            onChange={e => onChange(field, e.target.value)}
+            style={{
+                width: '100%', padding: 6, background: '#252526', border: '1px solid #3E3E42',
+                color: 'white', borderRadius: 2, fontSize: '0.9rem', cursor: 'pointer'
+            }}
+        // Handle trend_storage specific double-update in parent if needed, or generic here? 
+        // Better to handle logically in parent's handleChange.
+        >
+            {options.map(opt => (
+                <option key={opt.value} value={opt.value} style={{ background: '#333', color: 'white' }}>{opt.label}</option>
+            ))}
+        </select>
+    </div>
+);
+
 const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
     if (!isOpen || !tag) return null;
 
@@ -25,6 +71,12 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                 newState.trend_name = value;
                 newState.alarm_tag = value;
             }
+
+            // Sync trend_storage and trend_stormethod
+            if (field === 'trend_storage') {
+                newState.trend_stormethod = value;
+            }
+
             return newState;
         });
     };
@@ -44,52 +96,13 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
         fontWeight: activeTab === id ? 600 : 400
     });
 
+    const rowStyle = { display: 'flex', gap: 16, marginBottom: 12 };
     const labelStyle = { display: 'block', marginBottom: 4, fontSize: '0.75rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' };
     const inputStyle = {
         width: '100%', padding: 6, background: '#252526', border: '1px solid #3E3E42',
         color: 'white', borderRadius: 2, fontSize: '0.9rem'
     };
-    const rowStyle = { display: 'flex', gap: 16, marginBottom: 12 };
 
-    // Helper to render a field
-    const Field = ({ label, field, placeholder, width }) => (
-        <div style={{ flex: width ? 'none' : 1, width: width, marginBottom: 12 }}>
-            <label style={labelStyle}>{label}</label>
-            <input
-                value={formData[field] || ''}
-                onChange={e => handleChange(field, e.target.value)}
-                placeholder={placeholder}
-                style={inputStyle}
-            />
-        </div>
-    );
-
-    const CheckField = ({ label, field }) => (
-        <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
-                <input type="checkbox" checked={formData[field]} onChange={e => handleChange(field, e.target.checked)} />
-                <span style={{ fontWeight: 600, color: formData[field] ? 'var(--accent-color)' : 'inherit' }}>{label}</span>
-            </label>
-        </div>
-    );
-
-    const SelectField = ({ label, field, options, width }) => (
-        <div style={{ flex: width ? 'none' : 1, width: width, marginBottom: 12 }}>
-            <label style={labelStyle}>{label}</label>
-            <select
-                value={formData[field] || formData.trend_stormethod || ''}
-                onChange={e => {
-                    handleChange(field, e.target.value);
-                    handleChange('trend_stormethod', e.target.value);
-                }}
-                style={{ ...inputStyle, cursor: 'pointer' }}
-            >
-                {options.map(opt => (
-                    <option key={opt.value} value={opt.value} style={{ background: '#333', color: 'white' }}>{opt.label}</option>
-                ))}
-            </select>
-        </div>
-    );
 
     return (
         <div style={{
@@ -128,8 +141,8 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                         <div>
                             <div style={{ marginBottom: 24, borderBottom: '1px solid #333', paddingBottom: 16 }}>
                                 <div style={rowStyle}>
-                                    <Field label="Tag Name (Shared)" field="name" />
-                                    <Field label="Cluster (Shared)" field="cluster" />
+                                    <Field label="Tag Name (Shared)" field="name" data={formData} onChange={handleChange} />
+                                    <Field label="Cluster (Shared)" field="cluster" data={formData} onChange={handleChange} />
                                 </div>
                                 <div style={{ fontSize: '0.8rem', color: '#666', fontStyle: 'italic', marginBottom: 12 }}>
                                     * Setting "Tag Name" here updates Variable Name, Trend Name, and Alarm Tag.
@@ -138,10 +151,10 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
 
                             <div style={rowStyle}>
                                 {/* Project is not in grid data usually, check if needed or remove. Keeping for now if passed. */}
-                                <Field label="Udt Type" field="udt_type" />
+                                <Field label="Udt Type" field="udt_type" data={formData} onChange={handleChange} />
                             </div>
                             <div style={rowStyle}>
-                                <Field label="Comment (Trend)" field="trend_comment" />
+                                <Field label="Comment (Trend)" field="trend_comment" data={formData} onChange={handleChange} />
                                 {/* Alarm comment not standard in simple schema, maybe alarm_desc? */}
                             </div>
                         </div>
@@ -152,20 +165,20 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                         <>
                             {/* Removed Name & Cluster */}
                             <div style={rowStyle}>
-                                <Field label="Address" field="var_addr" />
-                                <Field label="Data Type" field="type" />
-                                <Field label="I/O Device" field="var_unit" />
+                                <Field label="Address" field="var_addr" data={formData} onChange={handleChange} />
+                                <Field label="Data Type" field="type" data={formData} onChange={handleChange} />
+                                <Field label="I/O Device" field="var_unit" data={formData} onChange={handleChange} />
                             </div>
                             <div style={rowStyle}>
-                                <Field label="Eng Units" field="var_eng_units" />
-                                <Field label="Format" field="var_format" />
-                                <Field label="Deadband" field="deadband" />
+                                <Field label="Eng Units" field="var_eng_units" data={formData} onChange={handleChange} />
+                                <Field label="Format" field="var_format" data={formData} onChange={handleChange} />
+                                <Field label="Deadband" field="deadband" data={formData} onChange={handleChange} />
                             </div>
                             <div style={rowStyle}>
-                                <Field label="Raw Zero" field="rawZero" />
-                                <Field label="Raw Full" field="rawFull" />
-                                <Field label="Eng Zero" field="var_eng_zero" />
-                                <Field label="Eng Full" field="var_eng_full" />
+                                <Field label="Raw Zero" field="rawZero" data={formData} onChange={handleChange} />
+                                <Field label="Raw Full" field="rawFull" data={formData} onChange={handleChange} />
+                                <Field label="Eng Zero" field="var_eng_zero" data={formData} onChange={handleChange} />
+                                <Field label="Eng Full" field="var_eng_full" data={formData} onChange={handleChange} />
                             </div>
                             <div style={rowStyle}>
                                 <div style={{ flex: 1 }}>
@@ -181,20 +194,20 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                             <div style={{ borderTop: '1px solid #333', paddingTop: 16, marginTop: 8 }}>
                                 <label style={{ ...labelStyle, marginBottom: 12 }}>Advanced Variable Settings</label>
                                 <div style={rowStyle}>
-                                    <Field label="Equipment" field="equipment" />
-                                    <Field label="Item" field="item" />
-                                    <Field label="TagGen Link" field="tagGenLink" />
+                                    <Field label="Equipment" field="equipment" data={formData} onChange={handleChange} />
+                                    <Field label="Item" field="item" data={formData} onChange={handleChange} />
+                                    <Field label="TagGen Link" field="tagGenLink" data={formData} onChange={handleChange} />
                                 </div>
                                 <div style={rowStyle}>
-                                    <Field label="Linked" field="linked" />
-                                    <Field label="Edit Code" field="editCode" />
-                                    <Field label="Historian" field="historian" />
+                                    <Field label="Linked" field="linked" data={formData} onChange={handleChange} />
+                                    <Field label="Edit Code" field="editCode" data={formData} onChange={handleChange} />
+                                    <Field label="Historian" field="historian" data={formData} onChange={handleChange} />
                                 </div>
                                 <div style={rowStyle}>
-                                    <Field label="Custom 1" field="custom1" />
-                                    <Field label="Custom 2" field="custom2" />
-                                    <Field label="Custom 3" field="custom3" />
-                                    <Field label="Custom 4" field="custom4" />
+                                    <Field label="Custom 1" field="custom1" data={formData} onChange={handleChange} />
+                                    <Field label="Custom 2" field="custom2" data={formData} onChange={handleChange} />
+                                    <Field label="Custom 3" field="custom3" data={formData} onChange={handleChange} />
+                                    <Field label="Custom 4" field="custom4" data={formData} onChange={handleChange} />
                                 </div>
                             </div>
                         </>
@@ -203,22 +216,22 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                     {/* --- TREND TAB --- */}
                     {activeTab === 'trend' && (
                         <>
-                            <CheckField label="Enable Trending" field="is_trend" />
+                            <CheckField label="Enable Trending" field="is_trend" data={formData} onChange={handleChange} />
 
                             {formData.is_trend ? (
                                 <>
                                     {/* Removed Name, Cluster */}
                                     <div style={rowStyle}>
-                                        <Field label="Expression" field="trend_expr" />
-                                        <Field label="Trigger" field="trend_trig" />
+                                        <Field label="Expression" field="trend_expr" data={formData} onChange={handleChange} />
+                                        <Field label="Trigger" field="trend_trig" data={formData} onChange={handleChange} />
                                     </div>
                                     <div style={rowStyle}>
-                                        <Field label="Sample Period" field="trend_sample_per" />
-                                        <Field label="Type" field="trend_type" />
+                                        <Field label="Sample Period" field="trend_sample_per" data={formData} onChange={handleChange} />
+                                        <Field label="Type" field="trend_type" data={formData} onChange={handleChange} />
                                     </div>
                                     <div style={rowStyle}>
-                                        <Field label="Privilege" field="trend_priv" />
-                                        <Field label="Area" field="trend_area" />
+                                        <Field label="Privilege" field="trend_priv" data={formData} onChange={handleChange} />
+                                        <Field label="Area" field="trend_area" data={formData} onChange={handleChange} />
                                     </div>
 
                                     <div style={{ borderTop: '1px solid #333', paddingTop: 16, marginTop: 8, marginBottom: 16 }}>
@@ -226,15 +239,17 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                                     </div>
 
                                     <div style={rowStyle}>
-                                        <Field label="File Name" field="trend_filename" />
-                                        <Field label="No. Files" field="trend_files" />
-                                        <Field label="Time" field="trend_time" />
-                                        <Field label="Period" field="trend_period_rec" />
+                                        <Field label="File Name" field="trend_filename" data={formData} onChange={handleChange} />
+                                        <Field label="No. Files" field="trend_files" data={formData} onChange={handleChange} />
+                                        <Field label="Time" field="trend_time" data={formData} onChange={handleChange} />
+                                        <Field label="Period" field="trend_period_rec" data={formData} onChange={handleChange} />
                                     </div>
                                     <div style={rowStyle}>
                                         <SelectField
                                             label="Storage Method"
                                             field="trend_storage"
+                                            data={formData}
+                                            onChange={handleChange}
                                             options={[
                                                 { value: '', label: '' },
                                                 { value: 'Scaled (2-byte samples)', label: 'Scaled (2-byte samples)' },
@@ -250,29 +265,29 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                     {/* --- ALARM TAB --- */}
                     {activeTab === 'digalm' && (
                         <>
-                            <CheckField label="Enable Alarm" field="is_alarm" />
+                            <CheckField label="Enable Alarm" field="is_alarm" data={formData} onChange={handleChange} />
 
                             {formData.is_alarm ? (
                                 <>
                                     {/* Removed TagName */}
                                     <div style={rowStyle}>
-                                        <Field label="Alarm Name (Desc)" field="alarm_desc" />
-                                        <Field label="Category" field="alarm_category" />
+                                        <Field label="Alarm Name (Desc)" field="alarm_desc" data={formData} onChange={handleChange} />
+                                        <Field label="Category" field="alarm_category" data={formData} onChange={handleChange} />
                                     </div>
                                     <div style={rowStyle}>
-                                        <Field label="Var A" field="alarm_var_a" />
-                                        <Field label="Var B" field="alarm_var_b" />
-                                    </div>
-
-                                    <div style={rowStyle}>
-                                        <Field label="Priority" field="alarm_priority" />
-                                        <Field label="Area" field="alarm_area" />
-                                        <Field label="Privilege" field="alarm_priv" />
+                                        <Field label="Var A" field="alarm_var_a" data={formData} onChange={handleChange} />
+                                        <Field label="Var B" field="alarm_var_b" data={formData} onChange={handleChange} />
                                     </div>
 
                                     <div style={rowStyle}>
-                                        <Field label="Help Msg" field="alarm_help" />
-                                        <Field label="Delay" field="alarm_delay" />
+                                        <Field label="Priority" field="alarm_priority" data={formData} onChange={handleChange} />
+                                        <Field label="Area" field="alarm_area" data={formData} onChange={handleChange} />
+                                        <Field label="Privilege" field="alarm_priv" data={formData} onChange={handleChange} />
+                                    </div>
+
+                                    <div style={rowStyle}>
+                                        <Field label="Help Msg" field="alarm_help" data={formData} onChange={handleChange} />
+                                        <Field label="Delay" field="alarm_delay" data={formData} onChange={handleChange} />
                                     </div>
                                 </>
                             ) : <div style={{ opacity: 0.5 }}>Check "Enable Alarm" to configure.</div>}

@@ -881,7 +881,7 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                         engFull: defaults?.engFull || '',
                         format: defaults?.format || '',
                         description: '',
-                        equipment: '', item: 'Value',
+                        equipment: '', item: '',
                         subRows: []
                     }, ...data])
                 }}>
