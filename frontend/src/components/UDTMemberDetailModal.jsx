@@ -112,10 +112,15 @@ const UDTMemberDetailModal = ({ isOpen, member, onSave, onClose }) => {
                                         </div>
                                         <div className="form-field">
                                             <label>Trend Type</label>
-                                            <select value={data.trend_type || 'TRN_PERIODIC'} onChange={e => setData({ ...data, trend_type: e.target.value })}>
-                                                <option value="TRN_EVENT">TRN_EVENT</option>
-                                                <option value="TRN_PERIODIC">TRN_PERIODIC</option>
-                                                <option value="TRN_PERIODIC_EVENT">TRN_PERIODIC_EVENT</option>
+                                            <select
+                                                value={data.is_trend ? (data.trend_type || 'TRN_PERIODIC') : ''}
+                                                onChange={e => setData({ ...data, trend_type: e.target.value })}
+                                                disabled={!data.is_trend}
+                                            >
+                                                <option value="" style={{ background: '#333', color: 'white' }}></option>
+                                                <option value="TRN_EVENT" style={{ background: '#333', color: 'white' }}>TRN_EVENT</option>
+                                                <option value="TRN_PERIODIC" style={{ background: '#333', color: 'white' }}>TRN_PERIODIC</option>
+                                                <option value="TRN_PERIODIC_EVENT" style={{ background: '#333', color: 'white' }}>TRN_PERIODIC_EVENT</option>
                                             </select>
                                         </div>
                                     </div>

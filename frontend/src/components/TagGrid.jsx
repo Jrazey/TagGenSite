@@ -585,17 +585,27 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                 {
                     accessorKey: 'trend_type',
                     header: 'Type',
-                    cell: ({ getValue, row }) => (
-                        <select
-                            value={getValue() || 'TRN_PERIODIC'}
-                            onChange={(e) => handleFieldChange(row.index, 'trend_type', e.target.value)}
-                            style={{ background: 'transparent', border: 'none', width: '100%', color: 'white' }}
-                        >
-                            <option value="TRN_EVENT" style={{ background: '#333', color: 'white' }}>TRN_EVENT</option>
-                            <option value="TRN_PERIODIC" style={{ background: '#333', color: 'white' }}>TRN_PERIODIC</option>
-                            <option value="TRN_PERIODIC_EVENT" style={{ background: '#333', color: 'white' }}>TRN_PERIODIC_EVENT</option>
-                        </select>
-                    ),
+                    cell: ({ getValue, row }) => {
+                        const isTrend = row.original.is_trend;
+                        const val = getValue();
+                        // If checking trend, default to TRN_PERIODIC if empty. If unticked, force empty.
+                        // But wait, if unticked, we want it visually empty.
+                        const displayValue = isTrend ? (val || 'TRN_PERIODIC') : '';
+
+                        return (
+                            <select
+                                value={displayValue}
+                                onChange={(e) => handleFieldChange(row.index, 'trend_type', e.target.value)}
+                                style={{ background: 'transparent', border: 'none', width: '100%', color: 'white', opacity: isTrend ? 1 : 0.5 }}
+                                disabled={!isTrend}
+                            >
+                                <option value="" style={{ background: '#333', color: 'white' }}></option>
+                                <option value="TRN_EVENT" style={{ background: '#333', color: 'white' }}>TRN_EVENT</option>
+                                <option value="TRN_PERIODIC" style={{ background: '#333', color: 'white' }}>TRN_PERIODIC</option>
+                                <option value="TRN_PERIODIC_EVENT" style={{ background: '#333', color: 'white' }}>TRN_PERIODIC_EVENT</option>
+                            </select>
+                        );
+                    },
                     size: 140
                 },
                 { accessorKey: 'trend_filename', header: 'File', cell: cellProps => <SimpleInput {...cellProps} field="trend_filename" />, size: 100 },
@@ -802,9 +812,11 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                                         style={{
                                             width: header.getSize(),
                                             left: isSticky ? left : 'auto',
-                                            position: isSticky ? 'sticky' : 'relative',
+                                            top: 0,
+                                            position: 'sticky',
                                             zIndex: isSticky ? 20 : 10,
-                                            backgroundColor: 'var(--bg-tertiary)'
+                                            backgroundColor: 'var(--bg-tertiary)',
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
                                         }}
                                         className={`${header.column.columnDef.meta?.headerClass || ''} ${isSep ? 'group-separator-right' : ''}`}
                                     >
@@ -817,7 +829,7 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                                                 {header.column.getCanSort() && <ArrowUpDown size={12} style={{ opacity: 0.5 }} />}
                                             </div>
                                             {/* Filters */}
-                                            {['citectName', 'address', 'udt_type'].includes(header.column.id) && (
+                                            {['name', 'plc_addr', 'citectName', 'address', 'udt_type'].includes(header.column.id) && (
                                                 <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 4, padding: '2px 4px' }}>
                                                     <Search size={10} style={{ marginRight: 4, opacity: 0.5 }} />
                                                     <input
