@@ -72,11 +72,6 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                 newState.alarm_tag = value;
             }
 
-            // Sync trend_storage and trend_stormethod
-            if (field === 'trend_storage') {
-                newState.trend_stormethod = value;
-            }
-
             return newState;
         });
     };
@@ -153,10 +148,7 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                                 {/* Project is not in grid data usually, check if needed or remove. Keeping for now if passed. */}
                                 <Field label="Udt Type" field="udt_type" data={formData} onChange={handleChange} />
                             </div>
-                            <div style={rowStyle}>
-                                <Field label="Comment (Trend)" field="trend_comment" data={formData} onChange={handleChange} />
-                                {/* Alarm comment not standard in simple schema, maybe alarm_desc? */}
-                            </div>
+
                         </div>
                     )}
 
@@ -175,8 +167,8 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                                 <Field label="Deadband" field="deadband" data={formData} onChange={handleChange} />
                             </div>
                             <div style={rowStyle}>
-                                <Field label="Raw Zero" field="rawZero" data={formData} onChange={handleChange} />
-                                <Field label="Raw Full" field="rawFull" data={formData} onChange={handleChange} />
+                                <Field label="Raw Zero" field="var_raw_zero" data={formData} onChange={handleChange} />
+                                <Field label="Raw Full" field="var_raw_full" data={formData} onChange={handleChange} />
                                 <Field label="Eng Zero" field="var_eng_zero" data={formData} onChange={handleChange} />
                                 <Field label="Eng Full" field="var_eng_full" data={formData} onChange={handleChange} />
                             </div>
@@ -196,18 +188,34 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                                 <div style={rowStyle}>
                                     <Field label="Equipment" field="equipment" data={formData} onChange={handleChange} />
                                     <Field label="Item" field="item" data={formData} onChange={handleChange} />
-                                    <Field label="TagGen Link" field="tagGenLink" data={formData} onChange={handleChange} />
+                                    <Field label="TagGen Link" field="taggenlink" data={formData} onChange={handleChange} />
                                 </div>
                                 <div style={rowStyle}>
                                     <Field label="Linked" field="linked" data={formData} onChange={handleChange} />
-                                    <Field label="Edit Code" field="editCode" data={formData} onChange={handleChange} />
+                                    <Field label="Edit Code" field="editcode" data={formData} onChange={handleChange} />
                                     <Field label="Historian" field="historian" data={formData} onChange={handleChange} />
+                                </div>
+                                <div style={rowStyle}>
+                                    <Field label="OID" field="oid" data={formData} onChange={handleChange} />
+                                    <Field label="Ref1" field="ref1" data={formData} onChange={handleChange} />
+                                    <Field label="Ref2" field="ref2" data={formData} onChange={handleChange} />
+                                </div>
+                                <div style={rowStyle}>
+                                    <Field label="Custom" field="custom" data={formData} onChange={handleChange} />
+                                    <Field label="Write Roles" field="write_roles" data={formData} onChange={handleChange} />
+                                    <Field label="GUID" field="guid" data={formData} onChange={handleChange} />
                                 </div>
                                 <div style={rowStyle}>
                                     <Field label="Custom 1" field="custom1" data={formData} onChange={handleChange} />
                                     <Field label="Custom 2" field="custom2" data={formData} onChange={handleChange} />
                                     <Field label="Custom 3" field="custom3" data={formData} onChange={handleChange} />
                                     <Field label="Custom 4" field="custom4" data={formData} onChange={handleChange} />
+                                </div>
+                                <div style={rowStyle}>
+                                    <Field label="Custom 5" field="custom5" data={formData} onChange={handleChange} />
+                                    <Field label="Custom 6" field="custom6" data={formData} onChange={handleChange} />
+                                    <Field label="Custom 7" field="custom7" data={formData} onChange={handleChange} />
+                                    <Field label="Custom 8" field="custom8" data={formData} onChange={handleChange} />
                                 </div>
                             </div>
                         </>
@@ -233,6 +241,9 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                                         <Field label="Privilege" field="trend_priv" data={formData} onChange={handleChange} />
                                         <Field label="Area" field="trend_area" data={formData} onChange={handleChange} />
                                     </div>
+                                    <div style={rowStyle}>
+                                        <Field label="Comment" field="trend_comment" data={formData} onChange={handleChange} />
+                                    </div>
 
                                     <div style={{ borderTop: '1px solid #333', paddingTop: 16, marginTop: 8, marginBottom: 16 }}>
                                         <label style={labelStyle}>Storage & History</label>
@@ -242,12 +253,12 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                                         <Field label="File Name" field="trend_filename" data={formData} onChange={handleChange} />
                                         <Field label="No. Files" field="trend_files" data={formData} onChange={handleChange} />
                                         <Field label="Time" field="trend_time" data={formData} onChange={handleChange} />
-                                        <Field label="Period" field="trend_period_rec" data={formData} onChange={handleChange} />
+                                        <Field label="Period" field="trend_period" data={formData} onChange={handleChange} />
                                     </div>
                                     <div style={rowStyle}>
                                         <SelectField
                                             label="Storage Method"
-                                            field="trend_storage"
+                                            field="trend_stormethod"
                                             data={formData}
                                             onChange={handleChange}
                                             options={[
@@ -256,6 +267,37 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                                                 { value: 'Floating point (8-byte samples)', label: 'Floating point (8-byte samples)' }
                                             ]}
                                         />
+                                    </div>
+
+                                    <div style={{ borderTop: '1px solid #333', paddingTop: 16, marginTop: 8 }}>
+                                        <label style={{ ...labelStyle, marginBottom: 12 }}>Advanced Trend Settings</label>
+                                        <div style={rowStyle}>
+                                            <Field label="Eng Units" field="trend_eng_units" data={formData} onChange={handleChange} />
+                                            <Field label="Format" field="trend_format" data={formData} onChange={handleChange} />
+                                        </div>
+                                        <div style={rowStyle}>
+                                            <Field label="Eng Zero" field="trend_eng_zero" data={formData} onChange={handleChange} />
+                                            <Field label="Eng Full" field="trend_eng_full" data={formData} onChange={handleChange} />
+                                            <Field label="Deadband" field="trend_deadband" data={formData} onChange={handleChange} />
+                                        </div>
+                                        <div style={rowStyle}>
+                                            <Field label="Edit Code" field="trend_editcode" data={formData} onChange={handleChange} />
+                                            <Field label="Linked" field="trend_linked" data={formData} onChange={handleChange} />
+                                        </div>
+                                        <div style={{ borderTop: '1px solid #333', paddingTop: 12, marginTop: 8 }}>
+                                            <label style={{ ...labelStyle, marginBottom: 8 }}>SPC Settings</label>
+                                        </div>
+                                        <div style={rowStyle}>
+                                            <Field label="SPC Flag" field="trend_spcflag" data={formData} onChange={handleChange} />
+                                            <Field label="LSL" field="trend_lsl" data={formData} onChange={handleChange} />
+                                            <Field label="USL" field="trend_usl" data={formData} onChange={handleChange} />
+                                        </div>
+                                        <div style={rowStyle}>
+                                            <Field label="SubGrpSize" field="trend_subgrpsize" data={formData} onChange={handleChange} />
+                                            <Field label="XDoubleBar" field="trend_xdoublebar" data={formData} onChange={handleChange} />
+                                            <Field label="Range" field="trend_range" data={formData} onChange={handleChange} />
+                                            <Field label="SDeviation" field="trend_sdeviation" data={formData} onChange={handleChange} />
+                                        </div>
                                     </div>
                                 </>
                             ) : <div style={{ opacity: 0.5 }}>Check "Enable Trending" to configure.</div>}
@@ -271,6 +313,7 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                                 <>
                                     {/* Removed TagName */}
                                     <div style={rowStyle}>
+                                        <Field label="Alarm Tag" field="alarm_tag" data={formData} onChange={handleChange} />
                                         <Field label="Alarm Name (Desc)" field="alarm_desc" data={formData} onChange={handleChange} />
                                         <Field label="Category" field="alarm_category" data={formData} onChange={handleChange} />
                                     </div>
@@ -280,14 +323,30 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                                     </div>
 
                                     <div style={rowStyle}>
-                                        <Field label="Priority" field="alarm_priority" data={formData} onChange={handleChange} />
                                         <Field label="Area" field="alarm_area" data={formData} onChange={handleChange} />
                                         <Field label="Privilege" field="alarm_priv" data={formData} onChange={handleChange} />
+                                        <Field label="Delay" field="alarm_delay" data={formData} onChange={handleChange} />
                                     </div>
 
                                     <div style={rowStyle}>
                                         <Field label="Help Msg" field="alarm_help" data={formData} onChange={handleChange} />
-                                        <Field label="Delay" field="alarm_delay" data={formData} onChange={handleChange} />
+                                    </div>
+
+                                    <div style={{ borderTop: '1px solid #333', paddingTop: 16, marginTop: 8 }}>
+                                        <label style={{ ...labelStyle, marginBottom: 12 }}>Advanced Alarm Settings</label>
+                                        <div style={rowStyle}>
+                                            <Field label="Name" field="alarm_name" data={formData} onChange={handleChange} />
+                                            <Field label="Comment" field="alarm_comment" data={formData} onChange={handleChange} />
+                                        </div>
+                                        <div style={rowStyle}>
+                                            <Field label="Sequence" field="alarm_sequence" data={formData} onChange={handleChange} />
+                                            <Field label="Paging" field="alarm_paging" data={formData} onChange={handleChange} />
+                                            <Field label="Paging Grp" field="alarm_paginggrp" data={formData} onChange={handleChange} />
+                                        </div>
+                                        <div style={rowStyle}>
+                                            <Field label="Edit Code" field="alarm_editcode" data={formData} onChange={handleChange} />
+                                            <Field label="Linked" field="alarm_linked" data={formData} onChange={handleChange} />
+                                        </div>
                                     </div>
                                 </>
                             ) : <div style={{ opacity: 0.5 }}>Check "Enable Alarm" to configure.</div>}

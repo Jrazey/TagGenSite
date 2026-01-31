@@ -14,27 +14,28 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
 
     // Visibility State (Hide Advanced by Default)
     const [columnVisibility, setColumnVisibility] = useState({
-        // Advanced fields hidden by default
+        // Advanced Variable fields hidden by default
         rawZero: false, rawFull: false, editCode: false, linked: false, oid: false,
         ref1: false, ref2: false, deadband: false, custom: false, tagGenLink: false,
         historian: false,
         custom1: false, custom2: false, custom3: false, custom4: false,
         custom5: false, custom6: false, custom7: false, custom8: false,
         writeRoles: false, guid: false,
-        spcFlag: false, lsl: false, usl: false, subGrpSize: false, xDoubleBar: false,
-        range: false, sDeviation: false, paging: false, pagingGrp: false,
 
-        // Advanced Trend hidden
+        // Advanced Trend hidden (from TREND.DBF)
         trend_expr: false, trend_trig: false, trend_priv: false, trend_area: false,
-        trend_files: false, trend_storage: false, trend_time: false, trend_period_rec: false,
+        trend_files: false, trend_storage: false, trend_time: false, trend_period: false,
         trend_comment: false, trend_spcflag: false, trend_lsl: false, trend_usl: false,
+        trend_subgrpsize: false, trend_xdoublebar: false, trend_range: false,
+        trend_sdeviation: false, trend_editcode: false, trend_linked: false,
+        trend_deadband: false, trend_eng_zero: false, trend_eng_full: false,
+        trend_eng_units: false, trend_format: false,
 
-        // Advanced Alarm hidden
-        alarm_help: false, alarm_area: false, alarm_priv: false, alarm_delay: false,
-        alarm_sequence: false, alarm_var_a: false, alarm_var_b: false, alarm_paging: false,
-
-        // Hide duplicate var_addr (plc_addr is the primary input)
-        var_addr: false
+        // Advanced Alarm hidden (from DIGALM.DBF)
+        alarm_name: false, alarm_help: false, alarm_area: false, alarm_priv: false,
+        alarm_delay: false, alarm_sequence: false, alarm_var_a: false, alarm_var_b: false,
+        alarm_paging: false, alarm_paginggrp: false, alarm_editcode: false,
+        alarm_linked: false, alarm_comment: false
     });
 
     // Modal State
@@ -627,15 +628,7 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                     size: 120,
                     meta: { isSticky: true, left: 410 }
                 },
-                {
-                    accessorKey: 'var_addr',
-                    header: 'PLC Addr',
-                    cell: ({ getValue, row }) => (
-                        <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, 'var_addr', e.target.value)} />
-                    ),
-                    size: 120,
-                    meta: { isSticky: true, left: 530, isSeparated: true }
-                }
+
             ]
         },
         // --- VARIABLE ---
@@ -748,6 +741,25 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                 },
                 { accessorKey: 'trend_area', header: 'Area', cell: cellProps => <SimpleInput {...cellProps} field="trend_area" />, size: 60 },
                 { accessorKey: 'trend_priv', header: 'Priv', cell: cellProps => <SimpleInput {...cellProps} field="trend_priv" />, size: 60 },
+                // Hidden TREND columns (from TREND.DBF)
+                { accessorKey: 'trend_eng_units', header: 'Eng Units', cell: cellProps => <SimpleInput {...cellProps} field="trend_eng_units" />, size: 80 },
+                { accessorKey: 'trend_format', header: 'Format', cell: cellProps => <SimpleInput {...cellProps} field="trend_format" />, size: 80 },
+                { accessorKey: 'trend_files', header: 'Files', cell: cellProps => <SimpleInput {...cellProps} field="trend_files" />, size: 60 },
+                { accessorKey: 'trend_time', header: 'Time', cell: cellProps => <SimpleInput {...cellProps} field="trend_time" />, size: 80 },
+                { accessorKey: 'trend_period', header: 'Period Rec', cell: cellProps => <SimpleInput {...cellProps} field="trend_period" />, size: 80 },
+                { accessorKey: 'trend_comment', header: 'Comment', cell: cellProps => <SimpleInput {...cellProps} field="trend_comment" />, size: 150 },
+                { accessorKey: 'trend_spcflag', header: 'SPC Flag', cell: cellProps => <SimpleInput {...cellProps} field="trend_spcflag" />, size: 60 },
+                { accessorKey: 'trend_lsl', header: 'LSL', cell: cellProps => <SimpleInput {...cellProps} field="trend_lsl" />, size: 60 },
+                { accessorKey: 'trend_usl', header: 'USL', cell: cellProps => <SimpleInput {...cellProps} field="trend_usl" />, size: 60 },
+                { accessorKey: 'trend_subgrpsize', header: 'SubGrpSize', cell: cellProps => <SimpleInput {...cellProps} field="trend_subgrpsize" />, size: 80 },
+                { accessorKey: 'trend_xdoublebar', header: 'XDoubleBar', cell: cellProps => <SimpleInput {...cellProps} field="trend_xdoublebar" />, size: 80 },
+                { accessorKey: 'trend_range', header: 'Range', cell: cellProps => <SimpleInput {...cellProps} field="trend_range" />, size: 60 },
+                { accessorKey: 'trend_sdeviation', header: 'SDeviation', cell: cellProps => <SimpleInput {...cellProps} field="trend_sdeviation" />, size: 80 },
+                { accessorKey: 'trend_editcode', header: 'Edit Code', cell: cellProps => <SimpleInput {...cellProps} field="trend_editcode" />, size: 80 },
+                { accessorKey: 'trend_linked', header: 'Linked', cell: cellProps => <SimpleInput {...cellProps} field="trend_linked" />, size: 60 },
+                { accessorKey: 'trend_deadband', header: 'Deadband', cell: cellProps => <SimpleInput {...cellProps} field="trend_deadband" />, size: 80 },
+                { accessorKey: 'trend_eng_zero', header: 'Eng Zero', cell: cellProps => <SimpleInput {...cellProps} field="trend_eng_zero" />, size: 80 },
+                { accessorKey: 'trend_eng_full', header: 'Eng Full', cell: cellProps => <SimpleInput {...cellProps} field="trend_eng_full" />, size: 80 },
             ]
         },
         // --- ALARM ---
@@ -780,6 +792,16 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                 { accessorKey: 'alarm_area', header: 'Area', cell: cellProps => <SimpleInput {...cellProps} field="alarm_area" />, size: 60 },
                 { accessorKey: 'alarm_priv', header: 'Priv', cell: cellProps => <SimpleInput {...cellProps} field="alarm_priv" />, size: 60 },
                 { accessorKey: 'alarm_delay', header: 'Delay', cell: cellProps => <SimpleInput {...cellProps} field="alarm_delay" />, size: 60 },
+                // Hidden ALARM columns (from DIGALM.DBF)
+                { accessorKey: 'alarm_name', header: 'Name', cell: cellProps => <SimpleInput {...cellProps} field="alarm_name" />, size: 140 },
+                { accessorKey: 'alarm_var_a', header: 'Var A', cell: cellProps => <SimpleInput {...cellProps} field="alarm_var_a" />, size: 100 },
+                { accessorKey: 'alarm_var_b', header: 'Var B', cell: cellProps => <SimpleInput {...cellProps} field="alarm_var_b" />, size: 100 },
+                { accessorKey: 'alarm_comment', header: 'Comment', cell: cellProps => <SimpleInput {...cellProps} field="alarm_comment" />, size: 150 },
+                { accessorKey: 'alarm_sequence', header: 'Sequence', cell: cellProps => <SimpleInput {...cellProps} field="alarm_sequence" />, size: 80 },
+                { accessorKey: 'alarm_paging', header: 'Paging', cell: cellProps => <SimpleInput {...cellProps} field="alarm_paging" />, size: 80 },
+                { accessorKey: 'alarm_paginggrp', header: 'Paging Grp', cell: cellProps => <SimpleInput {...cellProps} field="alarm_paginggrp" />, size: 100 },
+                { accessorKey: 'alarm_editcode', header: 'Edit Code', cell: cellProps => <SimpleInput {...cellProps} field="alarm_editcode" />, size: 80 },
+                { accessorKey: 'alarm_linked', header: 'Linked', cell: cellProps => <SimpleInput {...cellProps} field="alarm_linked" />, size: 60 },
             ]
         },
         // --- COMPAT ---
