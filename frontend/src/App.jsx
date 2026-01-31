@@ -25,13 +25,29 @@ function App() {
   const gridRef = useRef();
 
   useEffect(() => {
-    // Fetch projects
-    axios.get('http://127.0.0.1:8000/api/projects')
-      .then(res => {
-        setProjects(res.data);
-        if (res.data.length > 0) setSelectedProject(res.data[0]);
-      })
-      .catch(err => console.error("Failed to fetch projects:", err));
+    // Fetch projects and restore last opened
+    const init = async () => {
+      try {
+        const [projRes, settingsRes] = await Promise.all([
+          axios.get('http://127.0.0.1:8000/api/projects'),
+          axios.get('http://127.0.0.1:8000/api/settings') // Global settings
+        ]);
+
+        setProjects(projRes.data);
+
+        const savedPath = settingsRes.data.last_opened_project;
+        const target = projRes.data.find(p => p.path === savedPath);
+
+        if (target) {
+          setSelectedProject(target);
+        } else if (projRes.data.length > 0) {
+          setSelectedProject(projRes.data[0]);
+        }
+      } catch (err) {
+        console.error("Initialization failed:", err);
+      }
+    };
+    init();
   }, []);
 
   // Fetch Defaults
@@ -189,6 +205,11 @@ function App() {
             onChange={(e) => {
               const proj = projects.find(p => p.path === e.target.value);
               setSelectedProject(proj);
+              if (proj) {
+                axios.post('http://127.0.0.1:8000/api/settings', {
+                  settings: { last_opened_project: proj.path }
+                }).catch(console.error);
+              }
             }}
             style={{ padding: '4px', background: '#333', color: '#fff', border: 'none' }}
           >

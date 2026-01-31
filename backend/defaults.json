@@ -1,0 +1,11 @@
+{
+  "cluster": "Cluster1",
+  "sample_period": "00:00:01",
+  "trend_type": "TRN_PERIODIC",
+  "trend_history": "365 weeks",
+  "alarm_category": "1",
+  "alarm_priority": "1",
+  "alarm_area": "",
+  "scada_root_path": "C:\\ProgramData\\AVEVA Plant SCADA 2023 R2\\User",
+  "last_opened_project": "C:\\ProgramData\\AVEVA Plant SCADA 2023 R2\\User\\Aq_Longwall_Sub1"
+}
