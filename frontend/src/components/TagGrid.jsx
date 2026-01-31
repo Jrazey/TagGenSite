@@ -1,9 +1,64 @@
 
-import React, { useState, useMemo, useEffect, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useMemo, useEffect, useImperativeHandle, forwardRef, useCallback, memo } from 'react';
 import { useReactTable, getCoreRowModel, getExpandedRowModel, getSortedRowModel, getFilteredRowModel, flexRender } from '@tanstack/react-table';
 import axios from 'axios';
 import { ChevronRight, ChevronDown, Plus, Lock, Unlock, ArrowUpDown, Search, Trash2 } from 'lucide-react';
 import TagDetailModal from './TagDetailModal';
+
+// ============================================
+// OPTIMIZED INPUT COMPONENT (defined OUTSIDE TagGrid to prevent recreation)
+// Uses local state during typing, commits on blur OR after 150ms debounce
+// ============================================
+const DebouncedInput = memo(({ value: externalValue, onChange, debounceMs = 750, ...props }) => {
+    const [localValue, setLocalValue] = useState(externalValue || '');
+    const timeoutRef = React.useRef(null);
+
+    // Sync with external value when it changes (but not during active editing)
+    useEffect(() => {
+        setLocalValue(externalValue || '');
+    }, [externalValue]);
+
+    const handleChange = (e) => {
+        const newValue = e.target.value;
+        setLocalValue(newValue);
+
+        // Clear existing timeout
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+        }
+
+        // Debounce the commit to parent
+        timeoutRef.current = setTimeout(() => {
+            onChange(newValue);
+        }, debounceMs);
+    };
+
+    const handleBlur = () => {
+        // Clear pending debounce and commit immediately on blur
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+        }
+        onChange(localValue);
+    };
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+            }
+        };
+    }, []);
+
+    return (
+        <input
+            {...props}
+            value={localValue}
+            onChange={handleChange}
+            onBlur={handleBlur}
+        />
+    );
+});
 
 const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
     const [data, setData] = useState([]);
@@ -431,16 +486,51 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
     // UDT instances: identification fields are editable, others are disabled/grayed
     // Members: show values (read-only since they're generated from template)
     // Single tags: fully editable
+    // OPTIMIZED: Uses local state during typing, commits on blur for performance
     const SimpleInput = ({ getValue, row, field, readOnly, isIdentification = false }) => {
         // Only UDT parent rows (entry_type === 'udt_instance') get disabled cells
         const isUdtParent = row.original.entry_type === 'udt_instance';
         const isMember = row.original.entry_type === 'member';
 
+        // Local state for optimized typing (prevents full grid re-render on each keystroke)
+        const [localValue, setLocalValue] = React.useState(getValue() || '');
+        const [isFocused, setIsFocused] = React.useState(false);
+
+        // Sync local state when external value changes (e.g., from modal save)
+        React.useEffect(() => {
+            if (!isFocused) {
+                setLocalValue(getValue() || '');
+            }
+        }, [getValue, isFocused]);
+
+        const handleBlur = () => {
+            setIsFocused(false);
+            // Only commit if value actually changed
+            if (localValue !== (getValue() || '')) {
+                handleFieldChange(row.index, field, localValue);
+            }
+        };
+
+        const handleKeyDown = (e) => {
+            if (e.key === 'Enter') {
+                e.target.blur(); // Commit on Enter
+            }
+        };
+
         // UDT parent: only identification fields are editable
         if (isUdtParent) {
             if (isIdentification) {
                 // Identification fields remain editable for UDT instances
-                return <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, field, e.target.value)} readOnly={readOnly} />;
+                return (
+                    <input
+                        value={localValue}
+                        onChange={(e) => setLocalValue(e.target.value)}
+                        onFocus={() => setIsFocused(true)}
+                        onBlur={handleBlur}
+                        onKeyDown={handleKeyDown}
+                        readOnly={readOnly}
+                    />
+                );
             } else {
                 // Non-identification fields are disabled for UDT instances
                 return <div style={{ background: '#1a1a1a', width: '100%', height: '100%', opacity: 0.4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: '10px' }}>—</div>;
@@ -452,8 +542,17 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
             return <span style={{ opacity: 0.85, paddingLeft: 4 }}>{getValue() || ''}</span>;
         }
 
-        // Single tags: fully editable
-        return <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, field, e.target.value)} readOnly={readOnly} />;
+        // Single tags: fully editable with optimized local state
+        return (
+            <input
+                value={localValue}
+                onChange={(e) => setLocalValue(e.target.value)}
+                onFocus={() => setIsFocused(true)}
+                onBlur={handleBlur}
+                onKeyDown={handleKeyDown}
+                readOnly={readOnly}
+            />
+        );
     };
 
     const columns = useMemo(() => [
@@ -514,7 +613,7 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                     accessorKey: 'cluster',
                     header: 'Cluster',
                     cell: ({ getValue, row }) => (
-                        <input value={getValue() || 'Cluster1'} onChange={(e) => handleFieldChange(row.index, 'cluster', e.target.value)} />
+                        <DebouncedInput value={getValue() || 'Cluster1'} onChange={(val) => handleFieldChange(row.index, 'cluster', val)} />
                     ),
                     size: 80,
                     meta: { isSticky: true, left: 30 }
@@ -523,7 +622,7 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                     accessorKey: 'var_unit',
                     header: 'IO Device',
                     cell: ({ getValue, row }) => (
-                        <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, 'var_unit', e.target.value)} />
+                        <DebouncedInput value={getValue() || ''} onChange={(val) => handleFieldChange(row.index, 'var_unit', val)} />
                     ),
                     size: 100,
                     meta: { isSticky: true, left: 110 }
@@ -532,9 +631,9 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                     accessorKey: 'prefix',
                     header: 'Prefix',
                     cell: ({ getValue, row }) => (
-                        <input
+                        <DebouncedInput
                             value={getValue() || ''}
-                            onChange={(e) => handlePrefixChange(row.index, e.target.value)}
+                            onChange={(val) => handlePrefixChange(row.index, val)}
                             placeholder="e.g. FIT101_"
                             style={{ fontStyle: 'italic', color: '#aaa' }}
                         />
@@ -546,9 +645,9 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                     accessorKey: 'plc_addr',
                     header: '⭐ PLC Address',
                     cell: ({ getValue, row }) => (
-                        <input
+                        <DebouncedInput
                             value={getValue() || row.original.var_addr || ''}
-                            onChange={(e) => handlePlcAddrChange(row.index, e.target.value)}
+                            onChange={(val) => handlePlcAddrChange(row.index, val)}
                             style={{
                                 background: 'var(--accent-color-dim, #1a3a5c)',
                                 border: '2px solid var(--accent-color, #4a9eff)',
@@ -565,9 +664,9 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                     header: 'Tag Name (Generated)',
                     cell: ({ getValue, row }) => (
                         <div style={{ display: 'flex', width: '100%' }}>
-                            <input
+                            <DebouncedInput
                                 value={getValue()}
-                                onChange={(e) => handleFieldChange(row.index, 'name', e.target.value)}
+                                onChange={(val) => handleFieldChange(row.index, 'name', val)}
                                 style={{
                                     border: /^[a-zA-Z0-9_\\/]*$/.test(getValue()) ? '1px solid transparent' : '2px solid red',
                                     fontWeight: row.original.entry_type === 'udt_instance' ? 'bold' : 'normal'
