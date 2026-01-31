@@ -64,6 +64,47 @@ function App() {
       .catch(console.error);
   };
 
+  /* State Loading Logic */
+  useEffect(() => {
+    if (selectedProject && gridRef.current) {
+      loadProjectState(selectedProject.path);
+    }
+  }, [selectedProject]);
+
+  const loadProjectState = async (path) => {
+    if (!gridRef.current) return;
+    try {
+      const res = await axios.get(`http://127.0.0.1:8000/api/state?path=${encodeURIComponent(path)}`);
+      if (res.data.found && res.data.tags && res.data.tags.length > 0) {
+        console.log("Loaded state from DB");
+        gridRef.current.importTags(res.data.tags);
+      } else {
+        // No saved state - reset to default empty row
+        console.log("No saved state, resetting to default");
+        gridRef.current.importTags([]);
+      }
+    } catch (e) {
+      console.error("Failed to load state", e);
+      // On error, also reset to avoid stale data
+      gridRef.current.importTags([]);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!gridRef.current || !selectedProject) return;
+    const tags = gridRef.current.getTags();
+    try {
+      await axios.post('http://127.0.0.1:8000/api/save_tags', {
+        project_path: selectedProject.path,
+        tags: tags
+      });
+      alert("Project saved to database.");
+    } catch (e) {
+      console.error("Save failed:", e);
+      alert("Save failed.");
+    }
+  };
+
   const generateData = async () => {
     // 1. Get tags from grid
     if (!gridRef.current) return null;
@@ -106,7 +147,7 @@ function App() {
 
   const handleImport = async () => {
     if (!selectedProject) return;
-    if (!confirm("Importing will overwrite current grid. Continue?")) return;
+    if (!confirm("Importing will overwrite current tags with data from DBF files. Any unsaved changes will be lost. Continue?")) return;
 
     try {
       const res = await axios.post('http://127.0.0.1:8000/api/import', {
@@ -158,18 +199,22 @@ function App() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setIsUDTBuilderOpen(true)} title="Manage UDTs">
-            <Database size={18} style={{ marginRight: 4 }} /> Manage UDTs
+            <Database size={18} style={{ marginRight: 4 }} /> UDTs
           </button>
           <button onClick={() => setIsSettingsOpen(true)} title="Settings">
             <Settings size={18} />
           </button>
+          <div style={{ width: 1, background: '#555', margin: '0 4px' }}></div>
+          <button onClick={handleSave} title="Save to Database">
+            <span style={{ marginRight: 4 }}>💾</span> Save
+          </button>
           <button onClick={handleImport} title="Import from DBF">
-            <Download size={18} style={{ marginRight: 4 }} /> Import
+            <Download size={18} style={{ marginRight: 4 }} /> Re-Import
           </button>
           <button onClick={handlePreview} title="View Raw DBF">
-            <Eye size={18} style={{ marginRight: 4 }} /> Preview Raw
+            <Eye size={18} style={{ marginRight: 4 }} /> Preview
           </button>
-          <button className="primary" onClick={handleGenerate}>Generate DBF</button>
+          <button className="primary" onClick={handleGenerate}>Generate / Sync</button>
         </div>
       </header>
       <main style={{ padding: '16px', overflow: 'auto', height: 'calc(100vh - 60px)' }}>

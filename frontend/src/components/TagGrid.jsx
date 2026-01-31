@@ -12,6 +12,31 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
     const [sorting, setSorting] = useState([]);
     const [columnFilters, setColumnFilters] = useState([]);
 
+    // Visibility State (Hide Advanced by Default)
+    const [columnVisibility, setColumnVisibility] = useState({
+        // Advanced fields hidden by default
+        rawZero: false, rawFull: false, editCode: false, linked: false, oid: false,
+        ref1: false, ref2: false, deadband: false, custom: false, tagGenLink: false,
+        historian: false,
+        custom1: false, custom2: false, custom3: false, custom4: false,
+        custom5: false, custom6: false, custom7: false, custom8: false,
+        writeRoles: false, guid: false,
+        spcFlag: false, lsl: false, usl: false, subGrpSize: false, xDoubleBar: false,
+        range: false, sDeviation: false, paging: false, pagingGrp: false,
+
+        // Advanced Trend hidden
+        trend_expr: false, trend_trig: false, trend_priv: false, trend_area: false,
+        trend_files: false, trend_storage: false, trend_time: false, trend_period_rec: false,
+        trend_comment: false, trend_spcflag: false, trend_lsl: false, trend_usl: false,
+
+        // Advanced Alarm hidden
+        alarm_help: false, alarm_area: false, alarm_priv: false, alarm_delay: false,
+        alarm_sequence: false, alarm_var_a: false, alarm_var_b: false, alarm_paging: false,
+
+        // Hide duplicate var_addr (plc_addr is the primary input)
+        var_addr: false
+    });
+
     // Modal State
     const [editingRowIndex, setEditingRowIndex] = useState(null);
     const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -19,139 +44,98 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
     useImperativeHandle(ref, () => ({
         getTags: () => data,
         importTags: (tags) => {
-            // Helper to mimic backend sanitizer
-            const sanitizeAddr = (addr) => {
+            // Updated Import Logic for Full-Fidelity Flat Schema
+            // The backend dbf_reader now returns the exact schema we need.
+            // We mainly ensuring IDs are unique and types are set.
+
+            // Helper: Sanitize PLC address for comparison
+            const sanitize = (addr) => {
                 if (!addr) return '';
-                let processed = addr.replace(/[. -]/g, '_'); // Replace . - space with _
-                // Mocking the Hex conversion roughly or just assuming standard _ usage
-                // Since this is for matching, strict mimic is hard without full logic.
-                // But usually, address in tag name matches the sanitized version.
-                // Let's assume the user's "Prefix + _ + Address" logic holds.
-                return processed;
+                let result = '';
+                for (let i = 0; i < addr.length; i++) {
+                    const char = addr[i];
+                    if (/[a-zA-Z0-9_]/.test(char)) {
+                        result += char;
+                    } else if (char === ':' || char === '.' || char === '[' || char === ']') {
+                        result += '_';
+                    } else {
+                        result += '_' + char.charCodeAt(0).toString(16).toUpperCase() + '_';
+                    }
+                }
+                result = result.replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+                return result;
             };
 
             const gridData = tags.map((t, i) => {
-                let derivedPrefix = t.NAME || '';
-                const rawAddr = t.ADDR || '';
+                // Derive plc_addr and prefix from existing data
+                const plcAddr = t.plc_addr || t.var_addr || '';
+                const tagName = t.name || '';
 
-                if (derivedPrefix && rawAddr) {
-                    // Try to deduce Prefix by stripping Address from Name
-                    // Logic: Name = Prefix + "_" + SanitizedAddr
-                    // So we look for the sanitized address at the end of the name.
-                    // We try a few variations of sanitization or just fuzzy match
-
-                    // Simple approach: standard replacement
-                    const suffix = rawAddr.replace(/[. :]/g, '_'); // Colon also often becomes underscore
-                    // Check if name ends with it
-                    // Try with and without prepended underscore
-
-                    // Case 1: Name ends with "_" + suffix (The standard pattern)
-                    // We need a robust way. Let's try to remove the address part if found at the end.
-
-                    // If we can't perfectly mimic, let's look for the *exact* user instruction:
-                    // "Prefix = Tag Name - Plc Addr"
-                    // If TagName is "Pump01_Running" and Addr is "Running" -> Prefix "Pump01"
-
-                    // We'll perform a case-insensitive check of the address parts?
-                    // Let's just try simple replacement of commonly replaced chars.
-                    const simplifiedAddr = rawAddr.replace(/[^a-zA-Z0-9]/g, '_');
-                    const pattern = new RegExp(`_?${simplifiedAddr}$`, 'i');
-
-                    // Actually, if simplifiedAddr is "Station01_Level_PV" and Tag is "Prefix_Station01_Level_PV"
-                    if (derivedPrefix.toUpperCase().endsWith('_' + simplifiedAddr.toUpperCase())) {
-                        derivedPrefix = derivedPrefix.substring(0, derivedPrefix.length - (simplifiedAddr.length + 1));
-                    }
-                    // If that didn't work, maybe the Address didn't have leading underscore in the match?
-                    else if (derivedPrefix.toUpperCase().endsWith(simplifiedAddr.toUpperCase())) {
-                        derivedPrefix = derivedPrefix.substring(0, derivedPrefix.length - simplifiedAddr.length);
+                // Reverse-engineer prefix: if tagName ends with sanitized(plcAddr), prefix is the remainder
+                let prefix = t.prefix || '';
+                if (!prefix && plcAddr && tagName) {
+                    const sanitizedAddr = sanitize(plcAddr);
+                    if (tagName.endsWith(sanitizedAddr)) {
+                        prefix = tagName.slice(0, tagName.length - sanitizedAddr.length);
                     }
                 }
 
                 return {
-                    id: t.id || `import_${i}`,
-                    type: t.type || 'single',
+                    ...t,
+                    id: t.id || `import_${i}_${Date.now()}`,
+                    plc_addr: plcAddr, // UI field
+                    prefix: prefix,     // Derived prefix
+                    // Ensure booleans are actual booleans
+                    is_expanded: false, // Collapse by default
+                    is_manual_override: t.is_manual_override !== undefined ? t.is_manual_override : true,
 
-                    // Identification
-                    cluster: t.CLUSTER || defaults?.cluster || 'Cluster1',
-                    udt_type: t.udt_type || 'Single',
-                    name: derivedPrefix, // DEDUCED PREFIX
-                    address: t.ADDR || '',
-                    citectName: t.NAME || '',
+                    // Arrays/SubRows
+                    subRows: [],
 
-                    // Variable
-                    dataType: t.TYPE || 'DIGITAL',
-                    engUnits: t.ENG_UNITS || '',
-                    engZero: t.ENG_ZERO || '',
-                    engFull: t.ENG_FULL || '',
-                    format: t.FORMAT || '',
-                    description: t.COMMENT || '',
-
-                    // Trend
-                    isTrend: t.isTrend === true || t.isTrend === 'True',
-                    trendName: t.trendName || (t.isTrend ? t.NAME : ''),
-                    samplePeriod: t.SAMPLEPER || '',
-                    trendType: t.trendType || 'TRN_PERIODIC',
-                    trendTrigger: t.TRIG || '',
-                    trendFilename: t.FILENAME || '',
-                    trendFiles: t.FILES || '',
-                    trendStorage: t.STORMETHOD || '',
-
-                    // Alarm
-                    isAlarm: t.isAlarm === true || t.isAlarm === 'True',
-                    alarmName: t.alarmName || (t.isAlarm ? (t.TAG || t.NAME + "_Alm") : ''),
-                    alarmCategory: t.CATEGORY || '',
-                    alarmPriority: t.PRIORITY || '',
-                    alarmHelp: t.HELP || '',
-                    alarmDelay: t.DELAY || '',
-                    alarmArea: t.AREA || '',
-
-                    // Compat
-                    equipment: t.EQUIP || '',
-                    item: t.ITEM || '',
-
-                    subRows: []
+                    // UI State Helpers (if needed)
+                    isTrend: t.is_trend,
+                    isAlarm: t.is_alarm
                 };
             });
             setData(gridData);
         }
     }));
 
-    // Templates now passed via props from App.jsx
-    // useEffect(() => { ... }, []);
-
-    // Mock initial data
+    // Mock initial data - updated keys
     useEffect(() => {
         if (data.length === 0) {
             setData([
                 {
-                    id: 1, type: 'single',
+                    id: 1,
+                    entry_type: 'single',
                     cluster: defaults?.cluster || 'Cluster1',
+                    var_unit: 'IODev1',
                     udt_type: 'Single',
-                    name: 'FIT101',
-                    address: 'Prog:Station01.Level.PV',
-                    citectName: 'FIT101_PV',
+                    name: 'FIT101_PV',     // Citect Tag Name
+                    var_addr: 'Prog:Station01.Level.PV',
 
-                    dataType: 'REAL',
-                    engUnits: 'kPa',
-                    engZero: '0',
-                    engFull: '100',
-                    format: '###.#',
+                    type: 'REAL', // Variable Type
+                    var_eng_units: 'kPa',
+                    var_eng_zero: '0',
+                    var_eng_full: '100',
+                    var_format: '###.#',
                     description: 'Flow Transmitter 101',
 
-                    isTrend: false,
-                    trendName: 'FIT101_PV',
-                    samplePeriod: '',
-                    trendType: 'TRN_PERIODIC',
-                    trendTrigger: '',
+                    is_trend: false,
+                    trend_name: 'FIT101_PV',
+                    trend_sample_per: '',
+                    trend_type: 'TRN_PERIODIC',
+                    trend_trig: '',
 
-                    isAlarm: false,
-                    alarmName: 'FIT101_Alm',
-                    alarmCategory: '',
-                    alarmPriority: '',
+                    is_alarm: false,
+                    alarm_tag: 'FIT101_Alm',
+                    alarm_category: '',
+                    alarm_priority: '',
 
                     equipment: 'FIT101',
                     item: 'Value',
 
+                    is_manual_override: false,
                     subRows: []
                 }
             ]);
@@ -165,197 +149,184 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
             const rowIndex = parseInt(rowIdStr);
             const rowData = data[rowIndex];
 
-            if (rowData && rowData.type === 'udt' && (!rowData.subRows || rowData.subRows.length === 0)) {
+            // Check if this is a UDT instance (by entry_type OR by having udt_type that's not 'Single')
+            const isUdt = rowData && (
+                rowData.entry_type === 'udt_instance' ||
+                (rowData.udt_type && rowData.udt_type !== 'Single' && rowData.udt_type !== '')
+            );
+
+            if (isUdt && (!rowData.subRows || rowData.subRows.length === 0)) {
                 try {
-                    const res = await axios.post('http://127.0.0.1:8000/api/expand', { ...rowData });
-                    // Filter: Only use 'variable' records (which now contain all metadata)
-                    const variables = res.data.filter(c => c._tag_type === 'variable');
+                    // Send the full row data to the backend for expansion
+                    const res = await axios.post('http://127.0.0.1:8000/api/expand', {
+                        ...rowData,
+                        entry_type: 'udt_instance' // Ensure backend knows it's a UDT
+                    });
 
-                    const children = variables.map(c => ({
-                        ...c,
-                        type: 'child',
-                        cluster: c.CLUSTER,
-                        udt_type: c._tag_type,
-                        name: c.NAME,
-                        address: c.ADDR,
-                        citectName: c.NAME,
+                    // API returns { variable: [...], trend: [...], digalm: [...] }
+                    const variables = res.data.variable || [];
+                    const trends = res.data.trend || [];
+                    const alarms = res.data.digalm || [];
 
-                        dataType: c.TYPE,
-                        engUnits: c.ENG_UNITS,
-                        engZero: c.ENG_ZERO,
-                        engFull: c.ENG_FULL,
-                        format: c.FORMAT,
-                        description: c.COMMENT,
+                    // Build lookup maps for quick access to full trend/alarm records
+                    const trendMap = new Map();
+                    trends.forEach(t => trendMap.set(t.NAME || t.EXPR, t));
 
-                        isTrend: c.isTrend,
-                        trendName: c.trendName || c.NAME,
-                        samplePeriod: c.samplePeriod || c.SAMPLEPER,
-                        trendType: c.trendType || (c.SAMPLEPER ? 'TRN_PERIODIC' : ''),
-                        trendTrigger: c.trendTrigger || c.TRIG,
-                        trendFilename: c.trendFilename || c.FILENAME,
+                    const alarmMap = new Map();
+                    alarms.forEach(a => alarmMap.set(a.TAG || a.NAME, a));
 
-                        isAlarm: c.isAlarm,
-                        alarmName: c.alarmName || (c.NAME + "_Alm"),
-                        alarmCategory: c.alarmCategory || c.CATEGORY,
-                        alarmPriority: c.alarmPriority || c.PRIORITY,
-                        alarmHelp: c.alarmHelp || c.HELP,
-                        alarmArea: c.alarmArea || c.AREA,
+                    // Map DBF-style keys (uppercase) to frontend keys (lowercase)
+                    const children = variables.map((c, idx) => {
+                        const varName = c.NAME || '';
+                        const trendData = trendMap.get(varName);
+                        const alarmData = alarmMap.get(varName);
 
-                        equipment: c.EQUIP,
-                        item: c.ITEM,
-                    }));
+                        return {
+                            id: `${rowData.id}_member_${idx}`,
+                            entry_type: 'member',
+                            parent_id: rowData.id,
+
+                            // Map DBF keys to frontend schema
+                            name: varName,
+                            var_addr: c.ADDR || '',
+                            plc_addr: c.ADDR || '',
+                            type: c.TYPE || 'DIGITAL',
+                            var_unit: c.UNIT || rowData.var_unit || '',
+                            var_eng_units: c.ENG_UNITS || '',
+                            var_eng_zero: c.ENG_ZERO || '',
+                            var_eng_full: c.ENG_FULL || '',
+                            var_format: c.FORMAT || '',
+                            description: c.COMMENT || '',
+                            cluster: c.CLUSTER || rowData.cluster || 'Cluster1',
+                            equipment: c.EQUIP || '',
+                            item: c.ITEM || '',
+
+                            // Inherit from parent where applicable
+                            prefix: rowData.prefix || '',
+
+                            // Determine trend/alarm flags by checking if matching entries exist
+                            is_trend: !!trendData,
+                            is_alarm: !!alarmData,
+
+                            // Trend fields from backend (if trend exists)
+                            trend_name: trendData ? (trendData.NAME || '') : '',
+                            trend_expr: trendData ? (trendData.EXPR || varName) : '',
+                            trend_sample_per: trendData ? (trendData.SAMPLEPER || '') : '',
+                            trend_type: trendData ? (trendData.TYPE || '') : '',
+                            trend_filename: trendData ? (trendData.FILENAME || '') : '',
+                            trend_storage: trendData ? (trendData.STORMETHOD || '') : '',
+                            trend_trig: trendData ? (trendData.TRIGGER || '') : '',
+                            trend_area: trendData ? (trendData.AREA || '') : '',
+                            trend_priv: trendData ? (trendData.PRIV || '') : '',
+
+                            // Alarm fields from backend (if alarm exists)
+                            alarm_tag: alarmData ? (alarmData.TAG || '') : '',
+                            alarm_desc: alarmData ? (alarmData.DESC || '') : '',
+                            alarm_category: alarmData ? (alarmData.CATEGORY || '') : '',
+                            alarm_help: alarmData ? (alarmData.HELP || '') : '',
+                            alarm_area: alarmData ? (alarmData.AREA || '') : '',
+                            alarm_priv: alarmData ? (alarmData.PRIV || '') : '',
+                            alarm_delay: alarmData ? (alarmData.DELAY || '') : '',
+
+                            is_manual_override: false,
+                            subRows: []
+                        };
+                    });
 
                     setData(prev => {
                         const newData = [...prev];
-                        // Immutable update of the row
                         newData[rowIndex] = { ...newData[rowIndex], subRows: children };
                         return newData;
                     });
-                } catch (e) { console.error("Expand failed", e); }
+                } catch (e) {
+                    console.error("Expand failed", e);
+                }
             }
         });
     }, [expanded, data]);
 
-    // Handlers
-    const sanitizeName = async (val) => {
-        try {
-            const res = await axios.post('http://127.0.0.1:8000/api/sanitize', { text: val });
-            return res.data.sanitized;
-        } catch { return val; }
-    };
-
-    const handlePrefixChange = async (rowIndex, newVal, currentAddr, rowId, type) => {
-        setData(prev => {
-            const newData = [...prev];
-            newData[rowIndex] = { ...newData[rowIndex], name: newVal };
-            return newData;
-        });
-
-        if (!isLocked[rowId]) {
-            const combined = `${newVal}_${currentAddr}`;
-            const sanitized = await sanitizeName(combined);
-            setData(prev => {
-                const newData = [...prev];
-                // Check if user has changed it since? No, just overwrite if unlocked.
-                newData[rowIndex] = {
-                    ...newData[rowIndex],
-                    citectName: sanitized,
-                    trendName: sanitized,
-                    alarmName: sanitized + "_Alm",
-                    equipment: sanitized
-                };
-                return newData;
-            });
-        }
-    };
-
-    const handleAddressChange = async (rowIndex, newVal, currentPrefix, rowId, type) => {
-        setData(prev => {
-            const newData = [...prev];
-            newData[rowIndex] = { ...newData[rowIndex], address: newVal };
-            return newData;
-        });
-
-        if (!isLocked[rowId]) {
-            // If prefix exists, try to combine
-            if (currentPrefix) {
-                const combined = `${currentPrefix}_${newVal}`;
-                const sanitized = await sanitizeName(combined);
-                setData(prev => {
-                    const newData = [...prev];
-                    newData[rowIndex] = {
-                        ...newData[rowIndex],
-                        citectName: sanitized,
-                        trendName: sanitized,
-                        alarmName: sanitized + "_Alm",
-                        equipment: sanitized
-                    };
-                    return newData;
-                });
+    // Handlers (Simplified)
+    // Sanitization Function for PLC Address -> Tag Name
+    const sanitizePlcAddr = (addr) => {
+        if (!addr) return '';
+        // Replace non-alphanumeric characters with hex equivalents
+        let result = '';
+        for (let i = 0; i < addr.length; i++) {
+            const char = addr[i];
+            if (/[a-zA-Z0-9_]/.test(char)) {
+                result += char;
+            } else if (char === ':' || char === '.' || char === '[' || char === ']') {
+                // Common PLC address separators -> underscore
+                result += '_';
+            } else {
+                // Convert to hex
+                result += '_' + char.charCodeAt(0).toString(16).toUpperCase() + '_';
             }
         }
+        // Remove consecutive underscores
+        result = result.replace(/_+/g, '_');
+        // Trim leading/trailing underscores
+        result = result.replace(/^_+|_+$/g, '');
+        return result;
     };
 
-    const handleTypeChange = (rowIndex, newType) => {
+    // Handler for PLC Addr change - auto-generates Tag Name if not manually overridden
+    const handlePlcAddrChange = (rowIndex, value) => {
         setData(prev => {
             const newData = [...prev];
             const row = { ...newData[rowIndex] };
+            row.plc_addr = value;
+            row.var_addr = value; // Also update var_addr for backend
 
-            if (newType === 'Single') {
-                row.type = 'single';
-                row.udt_type = 'Single';
-                row.subRows = []; // Clear any children
-            } else {
-                row.type = 'udt';
-                row.udt_type = newType;
-                // Auto-enable Trend and Alarm for UDTs by default
-                row.isTrend = true;
-                row.isAlarm = true;
-                row.subRows = []; // Clear to force re-expansion with new template
+            // Auto-generate name if not overridden
+            if (!row.is_manual_override) {
+                const prefix = row.prefix || '';
+                const sanitized = sanitizePlcAddr(value);
+                row.name = prefix + sanitized;
             }
-
             newData[rowIndex] = row;
             return newData;
         });
     };
 
-    const handleFieldChange = (rowIndex, field, val) => {
+    // Handler for Prefix change - auto-generates Tag Name if not manually overridden
+    const handlePrefixChange = (rowIndex, value) => {
         setData(prev => {
             const newData = [...prev];
-            const row = { ...newData[rowIndex], [field]: val };
+            const row = { ...newData[rowIndex] };
+            row.prefix = value;
 
-            // If UDT, clear subRows to force refresh of preview
-            if (row.type === 'udt') {
-                row.subRows = [];
-                // We might need to trigger a re-fetch if it's currently expanded.
-                // The useEffect depends on 'expanded', checking if subRows is empty.
-                // So clearing it here should trigger the existing useEffect logic!
+            // Auto-generate name if not overridden
+            if (!row.is_manual_override) {
+                const plcAddr = row.plc_addr || row.var_addr || '';
+                const sanitized = sanitizePlcAddr(plcAddr);
+                row.name = value + sanitized;
             }
-
             newData[rowIndex] = row;
             return newData;
         });
-    }
-
-    const toggleLock = (e, rowId) => {
-        e.stopPropagation();
-        setIsLocked(prev => ({ ...prev, [rowId]: !prev[rowId] }));
     };
 
     const handleCheckboxChange = (rowIndex, field, checked) => {
         setData(prev => {
             const newData = [...prev];
             const row = { ...newData[rowIndex], [field]: checked };
+            newData[rowIndex] = row;
+            return newData;
+        });
+    };
 
-            // Pre-fill Defaults
-            if (field === 'isTrend' && checked) {
-                if (!row.samplePeriod) row.samplePeriod = defaults?.sample_period || '00:00:01';
-                if (!row.trendType) row.trendType = defaults?.trend_type || 'TRN_PERIODIC';
-                if (!row.trendStorage) row.trendStorage = defaults?.trend_storage || 'Scaled';
-                if (!row.trendFiles) row.trendFiles = defaults?.trend_files || '';
-                // Default Name
-                if (!row.trendName) row.trendName = row.citectName;
-            }
-            if (field === 'isAlarm' && checked) {
-                if (!row.alarmCategory) row.alarmCategory = defaults?.alarm_category || '1';
-                if (!row.alarmPriority) row.alarmPriority = defaults?.alarm_priority || '1';
-                if (!row.alarmArea) row.alarmArea = defaults?.alarm_area || '';
-                if (!row.alarmHelp) row.alarmHelp = defaults?.alarm_help || '';
-                // Default Name
-                if (!row.alarmName) row.alarmName = row.citectName + "_Alm";
-            }
-
-            // If UDT, clear subRows to force refresh of preview logic (Master Switches)
-            if (row.type === 'udt') {
-                row.subRows = [];
-            }
-
+    const handleFieldChange = (rowIndex, field, value) => {
+        setData(prev => {
+            const newData = [...prev];
+            const row = { ...newData[rowIndex], [field]: value };
             newData[rowIndex] = row;
             return newData;
         });
     };
 
     const handleRowDoubleClick = (row) => {
+        // Open detail modal for this row
         setEditingRowIndex(row.index);
         setIsDetailOpen(true);
     };
@@ -364,11 +335,41 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
         if (editingRowIndex !== null) {
             setData(prev => {
                 const newData = [...prev];
-                newData[editingRowIndex] = updatedTag;
+                newData[editingRowIndex] = { ...newData[editingRowIndex], ...updatedTag };
                 return newData;
             });
         }
         setIsDetailOpen(false);
+        setEditingRowIndex(null);
+    };
+
+    // SimpleInput component - handles UDT instance vs member vs single tag display
+    // UDT instances: identification fields are editable, others are disabled/grayed
+    // Members: show values (read-only since they're generated from template)
+    // Single tags: fully editable
+    const SimpleInput = ({ getValue, row, field, readOnly, isIdentification = false }) => {
+        // Only UDT parent rows (entry_type === 'udt_instance') get disabled cells
+        const isUdtParent = row.original.entry_type === 'udt_instance';
+        const isMember = row.original.entry_type === 'member';
+
+        // UDT parent: only identification fields are editable
+        if (isUdtParent) {
+            if (isIdentification) {
+                // Identification fields remain editable for UDT instances
+                return <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, field, e.target.value)} readOnly={readOnly} />;
+            } else {
+                // Non-identification fields are disabled for UDT instances
+                return <div style={{ background: '#1a1a1a', width: '100%', height: '100%', opacity: 0.4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: '10px' }}>—</div>;
+            }
+        }
+
+        // Member rows: display values (generated from template, read-only)
+        if (isMember) {
+            return <span style={{ opacity: 0.85, paddingLeft: 4 }}>{getValue() || ''}</span>;
+        }
+
+        // Single tags: fully editable
+        return <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, field, e.target.value)} readOnly={readOnly} />;
     };
 
     const columns = useMemo(() => [
@@ -376,7 +377,7 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
             id: 'expander',
             header: () => null,
             cell: ({ row }) => (
-                row.original.type === 'udt' ? (
+                row.original.entry_type === 'udt_instance' ? (
                     <button onClick={row.getToggleExpandedHandler()} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text-secondary)' }}>
                         {row.getIsExpanded() ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </button>
@@ -385,59 +386,117 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
             size: 30,
             meta: { stickyWith: 0 }
         },
-        // --- IDENTIFICATION (Pinned Left) ---
+        // --- IDENTIFICATION ---
         {
             id: 'id_group',
             header: 'Identification',
             meta: { headerClass: 'group-id' },
             columns: [
-                // Project column hidden as per user request
-                // {
-                //     id: 'project',
-                //     header: 'Project',
-                //     cell: () => <span style={{ opacity: 0.5 }}>{project?.name || 'Current'}</span>,
-                //     size: 80,
-                //     meta: { isSticky: true, left: 30 }
-                // },
                 {
                     accessorKey: 'cluster',
                     header: 'Cluster',
                     cell: ({ getValue, row }) => (
-                        row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue() || 'Cluster1'} onChange={(e) => handleFieldChange(row.index, 'cluster', e.target.value)} />
+                        <input value={getValue() || 'Cluster1'} onChange={(e) => handleFieldChange(row.index, 'cluster', e.target.value)} />
                     ),
                     size: 80,
                     meta: { isSticky: true, left: 30 }
                 },
                 {
-                    accessorKey: 'name',
+                    accessorKey: 'var_unit',
+                    header: 'IO Device',
+                    cell: ({ getValue, row }) => (
+                        <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, 'var_unit', e.target.value)} />
+                    ),
+                    size: 100,
+                    meta: { isSticky: true, left: 110 }
+                },
+                {
+                    accessorKey: 'prefix',
                     header: 'Prefix',
                     cell: ({ getValue, row }) => (
-                        row.original.type === 'child' ? null :
+                        <input
+                            value={getValue() || ''}
+                            onChange={(e) => handlePrefixChange(row.index, e.target.value)}
+                            placeholder="e.g. FIT101_"
+                            style={{ fontStyle: 'italic', color: '#aaa' }}
+                        />
+                    ),
+                    size: 100,
+                    meta: { isSticky: true, left: 210 }
+                },
+                {
+                    accessorKey: 'plc_addr',
+                    header: '⭐ PLC Address',
+                    cell: ({ getValue, row }) => (
+                        <input
+                            value={getValue() || row.original.var_addr || ''}
+                            onChange={(e) => handlePlcAddrChange(row.index, e.target.value)}
+                            style={{
+                                background: 'var(--accent-color-dim, #1a3a5c)',
+                                border: '2px solid var(--accent-color, #4a9eff)',
+                                fontWeight: 'bold'
+                            }}
+                            placeholder="Enter PLC Address..."
+                        />
+                    ),
+                    size: 220,
+                    meta: { isSticky: true, left: 310 }
+                },
+                {
+                    accessorKey: 'name',
+                    header: 'Tag Name (Generated)',
+                    cell: ({ getValue, row }) => (
+                        <div style={{ display: 'flex', width: '100%' }}>
                             <input
                                 value={getValue()}
-                                onChange={(e) => handlePrefixChange(row.index, e.target.value, row.original.address, row.original.id, row.original.type)}
+                                onChange={(e) => handleFieldChange(row.index, 'name', e.target.value)}
+                                style={{
+                                    border: /^[a-zA-Z0-9_\\/]*$/.test(getValue()) ? '1px solid transparent' : '2px solid red',
+                                    fontWeight: row.original.entry_type === 'udt_instance' ? 'bold' : 'normal'
+                                }}
                             />
+                            {/* Manual Override Lock Icon */}
+                            {row.original.entry_type !== 'udt_instance' && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleCheckboxChange(row.index, 'is_manual_override', !row.original.is_manual_override);
+                                    }}
+                                    style={{ background: 'none', border: 'none', padding: 0, marginLeft: 4, cursor: 'pointer', color: row.original.is_manual_override ? 'orange' : 'gray' }}
+                                    title={row.original.is_manual_override ? "Manual Override ON: Values protected" : "Auto-Generated"}
+                                >
+                                    {row.original.is_manual_override ? <Lock size={12} /> : <Unlock size={12} />}
+                                </button>
+                            )}
+                        </div>
                     ),
-                    size: 140,
-                    meta: { isSticky: true, left: 110 }
+                    size: 200,
+                    meta: { isSticky: true, left: 530, isSeparated: true }
                 },
                 {
                     accessorKey: 'udt_type',
                     header: 'Type',
                     cell: ({ getValue, row }) => {
+                        // Simplified selection
                         return (
                             <select
-                                value={row.original.type === 'single' ? 'Single' : getValue()}
-                                onChange={(e) => handleTypeChange(row.index, e.target.value)}
-                                style={{
-                                    width: '100%',
-                                    background: 'transparent',
-                                    color: 'var(--accent-color)',
-                                    border: 'none',
-                                    fontSize: '0.9em',
-                                    cursor: 'pointer'
+                                value={row.original.entry_type === 'single' ? 'Single' : getValue()}
+                                onChange={(e) => {
+                                    // Handle Type Change Logic
+                                    const val = e.target.value;
+                                    setData(prev => {
+                                        const d = [...prev];
+                                        if (val === 'Single') {
+                                            d[row.index].entry_type = 'single';
+                                            d[row.index].udt_type = '';
+                                        } else {
+                                            d[row.index].entry_type = 'udt_instance';
+                                            d[row.index].udt_type = val;
+                                        }
+                                        return d;
+                                    });
                                 }}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--accent-color)' }}
                             >
                                 <option value="Single">Single Tag</option>
                                 <optgroup label="UDT Templates">
@@ -448,277 +507,183 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                             </select>
                         );
                     },
-                    size: 100,
-                    meta: { isSticky: true, left: 250 }
+                    size: 120,
+                    meta: { isSticky: true, left: 410 }
                 },
                 {
-                    accessorKey: 'address',
+                    accessorKey: 'var_addr',
                     header: 'PLC Addr',
                     cell: ({ getValue, row }) => (
-                        row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input
-                                value={getValue()}
-                                onChange={(e) => handleAddressChange(row.index, e.target.value, row.original.name, row.original.id, row.original.type)}
-                                style={{
-                                    border: '1px solid var(--accent-color)',
-                                    backgroundColor: 'rgba(0, 255, 127, 0.05)'
-                                }}
-                            />
+                        <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, 'var_addr', e.target.value)} />
                     ),
                     size: 120,
-                    meta: { isSticky: true, left: 330, headerStyle: { color: 'var(--accent-color)' } }
-                },
-                {
-                    accessorKey: 'citectName',
-                    header: 'Tag Name',
-                    cell: ({ getValue, row }) => (
-                        row.original.type === 'child' ? <span style={{ fontWeight: 500 }}>{getValue()}</span> :
-                            <div style={{ display: 'flex' }}>
-                                <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'citectName', e.target.value)} readOnly={!isLocked[row.original.id]} />
-                                <button onClick={(e) => toggleLock(e, row.original.id)} style={{ background: 'none', border: 'none', padding: 0, marginLeft: 2, opacity: 0.5 }}>
-                                    {isLocked[row.original.id] ? <Lock size={10} /> : <Unlock size={10} />}
-                                </button>
-                            </div>
-                    ),
-                    size: 180,
-                    meta: { isSticky: true, left: 450, isSeparated: true } // Border Right
-                },
+                    meta: { isSticky: true, left: 530, isSeparated: true }
+                }
             ]
         },
         // --- VARIABLE ---
         {
             id: 'var_group',
-            header: 'Variable Group',
+            header: 'Variable',
             meta: { headerClass: 'group-variable' },
             columns: [
                 {
-                    accessorKey: 'dataType',
+                    accessorKey: 'type',
                     header: 'Data Type',
                     cell: ({ getValue, row }) => {
-                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
-                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <select
-                                value={getValue()}
-                                onChange={(e) => handleFieldChange(row.index, 'dataType', e.target.value)}
-                                style={{ width: '100%', background: 'transparent', color: 'inherit', border: 'none' }}
-                            >
-                                {['BCD', 'BYTE', 'DIGITAL', 'INT', 'LONG', 'LONGBCD', 'REAL', 'STRING', 'UINT', 'ULONG'].map(t => (
-                                    <option key={t} value={t}>{t}</option>
-                                ))}
+                        // Only disable for UDT parent rows, NOT for members
+                        const isUdtParent = row.original.entry_type === 'udt_instance';
+                        if (isUdtParent) return <div style={{ background: '#1a1a1a', opacity: 0.4, textAlign: 'center', color: '#666' }}>—</div>;
+
+                        // Members show value as text (read-only)
+                        if (row.original.entry_type === 'member') {
+                            return <span style={{ opacity: 0.85, paddingLeft: 4 }}>{getValue() || ''}</span>;
+                        }
+
+                        return (
+                            <select value={getValue()} onChange={(e) => handleFieldChange(row.index, 'type', e.target.value)} style={{ background: 'transparent', border: 'none', width: '100%' }}>
+                                {['DIGITAL', 'INT', 'REAL', 'STRING', 'UINT', 'LONG', 'BYTE'].map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
+                        );
                     },
-                    size: 80
+                    size: 90
                 },
-                {
-                    accessorKey: 'engUnits',
-                    header: 'Eng Units',
-                    cell: ({ getValue, row }) => {
-                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
-                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'engUnits', e.target.value)} />
-                    },
-                    size: 70
-                },
-                {
-                    accessorKey: 'engZero',
-                    header: 'Zero',
-                    cell: ({ getValue, row }) => {
-                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
-                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'engZero', e.target.value)} />
-                    },
-                    size: 60
-                },
-                {
-                    accessorKey: 'engFull',
-                    header: 'Full',
-                    cell: ({ getValue, row }) => {
-                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
-                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'engFull', e.target.value)} />
-                    },
-                    size: 60
-                },
-                {
-                    accessorKey: 'format',
-                    header: 'Format',
-                    cell: ({ getValue, row }) => {
-                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
-                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'format', e.target.value)} />
-                    },
-                    size: 70
-                },
-                {
-                    accessorKey: 'description',
-                    header: 'Comment',
-                    cell: ({ getValue, row }) => {
-                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
-                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'description', e.target.value)} />
-                    },
-                    size: 200,
-                    meta: { isSeparated: true }
-                }
+                { accessorKey: 'var_eng_units', header: 'Eng Units', cell: cellProps => <SimpleInput {...cellProps} field="var_eng_units" />, size: 70 },
+                { accessorKey: 'var_eng_zero', header: 'Zero', cell: cellProps => <SimpleInput {...cellProps} field="var_eng_zero" />, size: 60 },
+                { accessorKey: 'var_eng_full', header: 'Full', cell: cellProps => <SimpleInput {...cellProps} field="var_eng_full" />, size: 60 },
+                { accessorKey: 'var_format', header: 'Format', cell: cellProps => <SimpleInput {...cellProps} field="var_format" />, size: 80 },
+                { accessorKey: 'description', header: 'Comment', cell: cellProps => <SimpleInput {...cellProps} field="description" />, size: 200, meta: { isSeparated: true } },
             ]
         },
         // --- TREND ---
         {
             id: 'trend_group',
-            header: 'Trend Group',
+            header: 'Trend',
             meta: { headerClass: 'group-trend' },
             columns: [
                 {
-                    id: 'isTrend',
+                    id: 'is_trend',
                     header: 'Trend?',
                     cell: ({ row }) => {
-                        return <input
-                            type="checkbox"
-                            checked={row.original.isTrend || false}
-                            disabled={row.original.type === 'child'}
-                            onChange={(e) => handleCheckboxChange(row.index, 'isTrend', e.target.checked)}
-                            style={{ width: 'auto', opacity: row.original.type === 'child' ? 0.6 : 1 }}
-                        />
+                        // Only disable for UDT parent rows
+                        const isUdtParent = row.original.entry_type === 'udt_instance';
+                        if (isUdtParent) return <div style={{ background: '#1a1a1a', opacity: 0.4, textAlign: 'center', color: '#666' }}>—</div>;
+
+                        // Members show checkbox (read-only indicator)
+                        if (row.original.entry_type === 'member') {
+                            return <input type="checkbox" checked={!!row.original.is_trend} disabled style={{ opacity: 0.7 }} />;
+                        }
+
+                        return <input type="checkbox" checked={row.original.is_trend} onChange={(e) => handleCheckboxChange(row.index, 'is_trend', e.target.checked)} />;
                     },
                     size: 50
                 },
-                {
-                    accessorKey: 'samplePeriod',
-                    header: 'Period',
-                    cell: ({ getValue, row }) => {
-                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
-                        // Hide detail if Trend is disabled for this row
-                        if (row.original.type === 'child' && !row.original.isTrend) return null;
-
-                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, 'samplePeriod', e.target.value)} disabled={!row.original.isTrend} />
-                    },
-                    size: 80
-                },
-                {
-                    accessorKey: 'trendType',
-                    header: 'Type',
-                    cell: ({ getValue, row }) => {
-                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
-                        if (row.original.type === 'child' && !row.original.isTrend) return null;
-
-                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <select
-                                value={getValue() || ''}
-                                onChange={(e) => handleFieldChange(row.index, 'trendType', e.target.value)}
-                                disabled={!row.original.isTrend}
-                                style={{ width: '100%', background: 'transparent', color: 'inherit', border: 'none' }}
-                            >
-                                <option value="">Select...</option>
-                                {['TRN_PERIODIC', 'TRN_EVENT', 'TRN_PERIODIC_EVENT'].map(t => (
-                                    <option key={t} value={t}>{t}</option>
-                                ))}
-                            </select>
-                    },
-                    size: 120
-                },
-                {
-                    accessorKey: 'trendTrigger',
-                    header: 'Trigger',
-                    cell: ({ getValue, row }) => {
-                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
-                        if (row.original.type === 'child' && !row.original.isTrend) return null;
-
-                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, 'trendTrigger', e.target.value)} disabled={!row.original.isTrend} />
-                    },
-                    size: 150,
-                    meta: { isSeparated: true }
-                }
+                { accessorKey: 'trend_name', header: 'Trend Name', cell: cellProps => <SimpleInput {...cellProps} field="trend_name" />, size: 140 },
+                { accessorKey: 'trend_expr', header: 'Expression', cell: cellProps => <SimpleInput {...cellProps} field="trend_expr" />, size: 140 },
+                { accessorKey: 'trend_sample_per', header: 'Period', cell: cellProps => <SimpleInput {...cellProps} field="trend_sample_per" />, size: 80 },
+                { accessorKey: 'trend_trig', header: 'Trigger', cell: cellProps => <SimpleInput {...cellProps} field="trend_trig" />, size: 100 },
+                { accessorKey: 'trend_type', header: 'Type', cell: cellProps => <SimpleInput {...cellProps} field="trend_type" />, size: 100 },
+                { accessorKey: 'trend_filename', header: 'File', cell: cellProps => <SimpleInput {...cellProps} field="trend_filename" />, size: 100 },
+                { accessorKey: 'trend_storage', header: 'Storage', cell: cellProps => <SimpleInput {...cellProps} field="trend_storage" />, size: 100 },
+                { accessorKey: 'trend_area', header: 'Area', cell: cellProps => <SimpleInput {...cellProps} field="trend_area" />, size: 60 },
+                { accessorKey: 'trend_priv', header: 'Priv', cell: cellProps => <SimpleInput {...cellProps} field="trend_priv" />, size: 60 },
             ]
         },
         // --- ALARM ---
         {
             id: 'alarm_group',
-            header: 'Alarm Group',
+            header: 'Alarm',
             meta: { headerClass: 'group-alarm' },
             columns: [
                 {
-                    id: 'isAlarm',
+                    id: 'is_alarm',
                     header: 'Alarm?',
                     cell: ({ row }) => {
-                        return <input
-                            type="checkbox"
-                            checked={row.original.isAlarm || false}
-                            disabled={row.original.type === 'child'}
-                            onChange={(e) => handleCheckboxChange(row.index, 'isAlarm', e.target.checked)}
-                            style={{ width: 'auto', opacity: row.original.type === 'child' ? 0.6 : 1 }}
-                        />
+                        // Only disable for UDT parent rows
+                        const isUdtParent = row.original.entry_type === 'udt_instance';
+                        if (isUdtParent) return <div style={{ background: '#1a1a1a', opacity: 0.4, textAlign: 'center', color: '#666' }}>—</div>;
+
+                        // Members show checkbox (read-only indicator)
+                        if (row.original.entry_type === 'member') {
+                            return <input type="checkbox" checked={!!row.original.is_alarm} disabled style={{ opacity: 0.7 }} />;
+                        }
+
+                        return <input type="checkbox" checked={row.original.is_alarm} onChange={(e) => handleCheckboxChange(row.index, 'is_alarm', e.target.checked)} />;
                     },
                     size: 50
                 },
-                {
-                    accessorKey: 'alarmCategory',
-                    header: 'Category',
-                    cell: ({ getValue, row }) => {
-                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
-                        if (row.original.type === 'child' && !row.original.isAlarm) return null;
-
-                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, 'alarmCategory', e.target.value)} disabled={!row.original.isAlarm} />
-                    },
-                    size: 70
-                },
-                {
-                    accessorKey: 'alarmPriority',
-                    header: 'Priority',
-                    cell: ({ getValue, row }) => {
-                        if (row.original.type === 'udt') return <div style={{ background: '#111', width: '100%', height: '100%', opacity: 0.3 }} />;
-                        if (row.original.type === 'child' && !row.original.isAlarm) return null;
-
-                        return row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue() || ''} onChange={(e) => handleFieldChange(row.index, 'alarmPriority', e.target.value)} disabled={!row.original.isAlarm} />
-                    },
-                    size: 70,
-                    meta: { isSeparated: true }
-                }
+                { accessorKey: 'alarm_tag', header: 'Alarm Tag', cell: cellProps => <SimpleInput {...cellProps} field="alarm_tag" />, size: 140 },
+                { accessorKey: 'alarm_desc', header: 'Desc', cell: cellProps => <SimpleInput {...cellProps} field="alarm_desc" />, size: 150 },
+                { accessorKey: 'alarm_category', header: 'Cat', cell: cellProps => <SimpleInput {...cellProps} field="alarm_category" />, size: 60 },
+                { accessorKey: 'alarm_help', header: 'Help', cell: cellProps => <SimpleInput {...cellProps} field="alarm_help" />, size: 120 },
+                { accessorKey: 'alarm_area', header: 'Area', cell: cellProps => <SimpleInput {...cellProps} field="alarm_area" />, size: 60 },
+                { accessorKey: 'alarm_priv', header: 'Priv', cell: cellProps => <SimpleInput {...cellProps} field="alarm_priv" />, size: 60 },
+                { accessorKey: 'alarm_delay', header: 'Delay', cell: cellProps => <SimpleInput {...cellProps} field="alarm_delay" />, size: 60 },
             ]
         },
         // --- COMPAT ---
         {
             id: 'group_compat',
-            header: 'Forward Compatibility',
+            header: 'Compatibility',
             meta: { headerClass: 'group-compat' },
             columns: [
-                {
-                    accessorKey: 'equipment',
-                    header: 'EQUIP',
-                    cell: ({ getValue, row }) =>
-                        row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'equipment', e.target.value)} />,
-                    size: 120
-                },
-                {
-                    accessorKey: 'item',
-                    header: 'ITEM',
-                    cell: ({ getValue, row }) =>
-                        row.original.type === 'child' ? <span style={{ opacity: 0.6 }}>{getValue()}</span> :
-                            <input value={getValue()} onChange={(e) => handleFieldChange(row.index, 'item', e.target.value)} />,
-                    size: 120
-                }
+                { accessorKey: 'equipment', header: 'Equipment', cell: ({ getValue, row }) => <input value={getValue()} onChange={e => handleFieldChange(row.index, 'equipment', e.target.value)} />, size: 120 },
+                { accessorKey: 'item', header: 'Item', cell: ({ getValue, row }) => <input value={getValue()} onChange={e => handleFieldChange(row.index, 'item', e.target.value)} />, size: 120 }
+            ]
+        },
+        // --- ADVANCED (Validation/Raw) ---
+        {
+            id: 'adv_group',
+            header: 'Advanced / Raw Data',
+            columns: [
+                { accessorKey: 'rawZero', header: 'Raw Zero', cell: cellProps => <SimpleInput {...cellProps} field="rawZero" />, size: 80 },
+                { accessorKey: 'rawFull', header: 'Raw Full', cell: cellProps => <SimpleInput {...cellProps} field="rawFull" />, size: 80 },
+                { accessorKey: 'editCode', header: 'Edit Code', cell: cellProps => <SimpleInput {...cellProps} field="editCode" />, size: 80 },
+                { accessorKey: 'linked', header: 'Linked', cell: cellProps => <SimpleInput {...cellProps} field="linked" />, size: 60 },
+                { accessorKey: 'oid', header: 'OID', cell: cellProps => <SimpleInput {...cellProps} field="oid" />, size: 80 },
+                { accessorKey: 'ref1', header: 'Ref1', cell: cellProps => <SimpleInput {...cellProps} field="ref1" />, size: 80 },
+                { accessorKey: 'ref2', header: 'Ref2', cell: cellProps => <SimpleInput {...cellProps} field="ref2" />, size: 80 },
+                { accessorKey: 'deadband', header: 'Deadband', cell: cellProps => <SimpleInput {...cellProps} field="deadband" />, size: 80 },
+                { accessorKey: 'custom', header: 'Custom', cell: cellProps => <SimpleInput {...cellProps} field="custom" />, size: 100 },
+                { accessorKey: 'tagGenLink', header: 'TagGen Link', cell: cellProps => <SimpleInput {...cellProps} field="tagGenLink" />, size: 100 },
+                { accessorKey: 'historian', header: 'Historian', cell: cellProps => <SimpleInput {...cellProps} field="historian" />, size: 80 },
+                { accessorKey: 'writeRoles', header: 'Write Roles', cell: cellProps => <SimpleInput {...cellProps} field="writeRoles" />, size: 100 },
+                { accessorKey: 'guid', header: 'GUID', cell: cellProps => <SimpleInput {...cellProps} field="guid" readOnly={true} />, size: 250 },
+                // Custom 1-8
+                { accessorKey: 'custom1', header: 'Custom 1', cell: cellProps => <SimpleInput {...cellProps} field="custom1" />, size: 80 },
+                { accessorKey: 'custom2', header: 'Custom 2', cell: cellProps => <SimpleInput {...cellProps} field="custom2" />, size: 80 },
+                { accessorKey: 'custom3', header: 'Custom 3', cell: cellProps => <SimpleInput {...cellProps} field="custom3" />, size: 80 },
+                { accessorKey: 'custom4', header: 'Custom 4', cell: cellProps => <SimpleInput {...cellProps} field="custom4" />, size: 80 },
+                { accessorKey: 'custom5', header: 'Custom 5', cell: cellProps => <SimpleInput {...cellProps} field="custom5" />, size: 80 },
+                { accessorKey: 'custom6', header: 'Custom 6', cell: cellProps => <SimpleInput {...cellProps} field="custom6" />, size: 80 },
+                { accessorKey: 'custom7', header: 'Custom 7', cell: cellProps => <SimpleInput {...cellProps} field="custom7" />, size: 80 },
+                { accessorKey: 'custom8', header: 'Custom 8', cell: cellProps => <SimpleInput {...cellProps} field="custom8" />, size: 80 },
             ]
         }
-    ], [isLocked, defaults, project]); // REMOVED 'data' dependency
+    ], [isLocked, project, defaults, templates]); // Removed 'data' - prevents focus loss on keystroke
+
+
 
     const table = useReactTable({
         data,
         columns,
-        state: { expanded },
+        state: {
+            expanded,
+            sorting,
+            columnFilters,
+            columnVisibility // Pass state
+        },
         onExpandedChange: setExpanded,
         onSortingChange: setSorting,
         onColumnFiltersChange: setColumnFilters,
+        onColumnVisibilityChange: setColumnVisibility, // Pass handler
         getRowId: (row, index, parent) => parent ? `${parent.id}.${index}` : index.toString(),
         getSubRows: row => row.subRows,
         getCoreRowModel: getCoreRowModel(),
         getExpandedRowModel: getExpandedRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
-        getRowCanExpand: row => row.original.type === 'udt' || (row.subRows && row.subRows.length > 0),
+        getRowCanExpand: row => row.original.entry_type === 'udt_instance' || (row.subRows && row.subRows.length > 0),
         autoResetExpanded: false,
     });
 
@@ -745,6 +710,66 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                 }}>
                     <Plus size={14} style={{ marginRight: 4 }} /> Add Tag
                 </button>
+
+                {/* Column Visibility Toggle */}
+                <div style={{ position: 'relative', display: 'inline-block', marginLeft: '10px' }}>
+                    <button
+                        onClick={() => document.getElementById('col-menu').style.display = document.getElementById('col-menu').style.display === 'block' ? 'none' : 'block'}
+                        style={{ padding: '0.4rem 0.8rem', background: '#333', border: '1px solid #555', color: '#fff', cursor: 'pointer' }}
+                    >
+                        Columns ▾
+                    </button>
+                    <div id="col-menu" style={{
+                        display: 'none', position: 'absolute', top: '100%', left: 0,
+                        background: '#222', border: '1px solid #444', zIndex: 100,
+                        maxHeight: '300px', overflowY: 'auto', width: '250px', padding: '10px'
+                    }}>
+                        <div style={{ marginBottom: '10px', borderBottom: '1px solid #444', paddingBottom: '5px' }}>
+                            <button
+                                onClick={() => {
+                                    setColumnVisibility({
+                                        rawZero: false, rawFull: false, editCode: false, linked: false, oid: false,
+                                        ref1: false, ref2: false, deadband: false, custom: false, tagGenLink: false,
+                                        historian: false,
+                                        custom1: false, custom2: false, custom3: false, custom4: false,
+                                        custom5: false, custom6: false, custom7: false, custom8: false,
+                                        writeRoles: false, guid: false,
+                                        spcFlag: false, lsl: false, usl: false, subGrpSize: false, xDoubleBar: false,
+                                        range: false, sDeviation: false, paging: false, pagingGrp: false
+                                    });
+                                }}
+                                style={{ width: '100%', padding: '5px', background: '#444', border: 'none', color: '#fff', cursor: 'pointer', marginBottom: '5px' }}
+                            >
+                                Reset to Default
+                            </button>
+                            <button
+                                onClick={() => table.toggleAllColumnsVisible(true)}
+                                style={{ width: '100%', padding: '5px', background: '#444', border: 'none', color: '#fff', cursor: 'pointer' }}
+                            >
+                                Show All
+                            </button>
+                        </div>
+                        {table.getAllLeafColumns().map(column => {
+                            // Skip sticky/core columns if desired, or let user hide everything
+                            if (column.id === 'expander' || column.id === 'cluster' || column.id === 'name') return null;
+                            return (
+                                <div key={column.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+                                    <label style={{ fontSize: '0.9em', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                        <input
+                                            {...{
+                                                type: 'checkbox',
+                                                checked: column.getIsVisible(),
+                                                onChange: column.getToggleVisibilityHandler(),
+                                            }}
+                                            style={{ marginRight: '6px' }}
+                                        />
+                                        {column.columnDef.header}
+                                    </label>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
             </div>
             <table className="tag-grid">
                 <thead>

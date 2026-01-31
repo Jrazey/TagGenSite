@@ -77,19 +77,16 @@ class DBFWriter:
         for record in staging_data:
             key = record.get(key_field)
             
-            # --- GUID LOGIC ---
-            if enable_guid:
-                if key in existing_records:
-                    existing_rec = existing_records[key]
+            if key in existing_records:
+                existing_rec = existing_records[key]
+                
+                # --- GUID LOGIC for existing records ---
+                if enable_guid:
                     existing_guid = existing_rec.get('GUID') or existing_rec.get('OID') 
-                    
                     if existing_guid:
                         record['GUID'] = existing_guid
                     elif 'GUID' not in record:
-                         record['GUID'] = self.generate_guid()
-                elif 'GUID' not in record:
-                    # New Record needs GUID if enabled
-                    record['GUID'] = self.generate_guid()
+                        record['GUID'] = self.generate_guid()
 
                 # --- MODIFICATION CHECK ---
                 is_modified = False

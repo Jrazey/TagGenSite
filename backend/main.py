@@ -200,19 +200,15 @@ def generate_tags(request: GenerateRequest, db: Session = Depends(get_db)):
 def expand_single_tag(tag: Dict[str, Any], db: Session = Depends(get_db)):
     """
     Returns the expanded members for a single UDT instance.
+    Returns: { variable: [...], trend: [...], digalm: [...] }
     """
     templates = get_all_templates(db)
     
     # Wrap in list
     expanded = udt_expander.expand_tags([tag], override_templates=templates)
     
-    combined = []
-    for t_type in ["variable", "trend", "digalm"]:
-        for item in expanded.get(t_type, []):
-            item["_tag_type"] = t_type # Marker for UI
-            combined.append(item)
-            
-    return combined
+    # Return the dict directly - frontend expects { variable: [], trend: [], digalm: [] }
+    return expanded
 def write_changes(request: WriteRequest):
     """
     Commit changes to DBF files.
@@ -301,32 +297,193 @@ def import_project(request: ImportRequest):
 def read_root():
     return {"message": "PlantSCADA Tag Manager API is running"}
 
-class StateRequest(BaseModel):
+class SaveTagsRequest(BaseModel):
     project_path: str
     tags: List[Dict[str, Any]]
 
+@app.post("/api/save_tags")
+def save_tags_db(request: SaveTagsRequest, db: Session = Depends(get_db)):
+    """
+    Full-Fidelity Save to SQLite.
+    Replaces all tags for the given project.
+    """
+    # 1. Delete existing
+    db.query(TagEntry).filter(TagEntry.project_path == request.project_path).delete()
+    
+    # 2. Iterate and Map
+    new_entries = []
+    timestamp = datetime.datetime.now().isoformat()
+    
+    for t in request.tags:
+        # Helper: Get value with fallback
+        def g(key, default=""):
+            return t.get(key, default) or default # Handle None
+
+        # Determine Entry Type
+        etype = g("entry_type", "single") 
+        if g("type") == "udt_instance": etype = "udt_instance" # Check legacy key if needed
+        # Frontend updated to use 'entry_type' but let's be safe
+        
+        entry = TagEntry(
+            project_path = request.project_path,
+            entry_type = etype,
+            is_manual_override = t.get("is_manual_override", False),
+            is_expanded = t.get("is_expanded", False),
+            
+            # Identity
+            name = g("citectName") or g("name"), # Prefix in Grid is 'name' for UDT, 'citectName' for single? 
+            # In TagGrid: 
+            # Single: name='FIT101_PV' (citectName), prefix is derived?
+            # 'citectName' is the main edited "Tag Name".
+            # 'name' is "Prefix" for UDTs.
+            # We should probably store both or decide mapping.
+            # TagEntry.name maps to VARIABLE.NAME. 
+            # For UDT Instance, Name is the Instance Prefix.
+            
+            cluster = g("cluster"),
+            type = g("udt_type") if etype == "udt_instance" else g("dataType"), # DBF TYPE vs UDT Type
+            description = g("description"),
+            equipment = g("equipment"),
+            item = g("item"),
+            
+            # Variable
+            var_addr = g("address") or g("var_addr"),
+            var_unit = g("unit") or g("var_unit"),
+            var_eng_units = g("engUnits") or g("var_eng_units"),
+            var_eng_zero = g("engZero") or g("var_eng_zero"),
+            var_eng_full = g("engFull") or g("var_eng_full"),
+            var_format = g("format") or g("var_format"),
+            
+            # Variable Advanced
+            var_raw_zero = g("rawZero"), var_raw_full = g("rawFull"),
+            editcode = g("editCode"), linked = g("linked"), oid = g("oid"),
+            ref1 = g("ref1"), ref2 = g("ref2"), deadband = g("deadband"),
+            custom = g("custom"), taggenlink = g("tagGenLink"), historian = g("historian"),
+            write_roles = g("writeRoles"), guid = g("guid"),
+            
+            # Custom
+            custom1 = g("custom1"), custom2 = g("custom2"), custom3 = g("custom3"),
+            custom4 = g("custom4"), custom5 = g("custom5"), custom6 = g("custom6"),
+            custom7 = g("custom7"), custom8 = g("custom8"),
+
+            # Trend
+            is_trend = t.get("isTrend", False) or t.get("is_trend", False),
+            trend_name = g("trendName") or g("trend_name"),
+            trend_expr = g("trend_expr"), # Added in update
+            trend_sample_per = g("samplePeriod") or g("trend_sample_per"),
+            trend_type = g("trendType") or g("trend_type"),
+            trend_filename = g("trendFilename") or g("trend_filename"),
+            trend_storage = g("trendStorage") or g("trend_storage"),
+            trend_files = g("trendFiles") or g("trend_files"),
+            
+            # Advanced Trend (from recent grid update)
+            trend_trig = g("trend_trig"), trend_priv = g("trend_priv"), trend_area = g("trend_area"),
+            # trend_time... etc if added
+            
+            # Alarm
+            is_alarm = t.get("isAlarm", False) or t.get("is_alarm", False),
+            alarm_tag = g("alarm_tag") or g("alarmTag"), # Grid accessor was alarm_tag logic?
+            # Grid accessor: alarm_tag.
+            
+            alarm_name = g("alarmName") or g("alarm_name"), # Grid uses alarm_tag mostly for TAG 
+            # DBF: 'TAG' is key. 'NAME' is redundant? TagGrid uses 'alarm_tag'. 
+            # TagEntry.alarm_tag matches DBF TAG.
+            
+            alarm_desc = g("alarm_desc"),
+            alarm_category = g("alarmCategory") or g("alarm_category"),
+            alarm_help = g("alarm_help") or g("alarmHelp"),
+            alarm_area = g("alarm_area") or g("alarmArea"),
+            alarm_priv = g("alarm_priv"),
+            alarm_delay = g("alarm_delay"),
+            
+            # Paging?
+        )
+        new_entries.append(entry)
+        
+    db.add_all(new_entries)
+    
+    # Update Project State (Timestamp)
+    state = db.query(ProjectState).filter(ProjectState.project_path == request.project_path).first()
+    if state:
+        state.updated_at = timestamp
+        # Optionally update tags_json too for legacy/quick load? 
+        # Or remove tags_json reliance? 
+        # Let's keep it in sync for now as backup.
+        state.tags_json = json.dumps(request.tags)
+    else:
+        state = ProjectState(project_path=request.project_path, tags_json=json.dumps(request.tags), updated_at=timestamp)
+        db.add(state)
+        
+    db.commit()
+    return {"status": "saved", "count": len(new_entries)}
+
 @app.get("/api/state")
 def get_project_state(path: str, db: Session = Depends(get_db)):
+    # Prefer loading from TagEntry table if data exists
+    entries = db.query(TagEntry).filter(TagEntry.project_path == path).all()
+    
+    if entries:
+        # Reconstruct Dicts from TagEntry
+        tags = []
+        for e in entries:
+            # Map back to Frontend CamelCase / Hybrid
+            t = {
+                "id": str(e.id), # Use DB ID?
+                "entry_type": e.entry_type,
+                "is_manual_override": e.is_manual_override,
+                "is_expanded": e.is_expanded,
+                
+                "name": e.name, # Prefix/Name
+                "citectName": e.name, # Alias
+                "cluster": e.cluster,
+                "udt_type": e.type if e.entry_type == "udt_instance" else "",
+                "type": e.type, # Raw Type
+                
+                "address": e.var_addr, "var_addr": e.var_addr,
+                "unit": e.var_unit, "var_unit": e.var_unit,
+                "engUnits": e.var_eng_units, "var_eng_units": e.var_eng_units,
+                "engZero": e.var_eng_zero, "var_eng_zero": e.var_eng_zero,
+                "engFull": e.var_eng_full, "var_eng_full": e.var_eng_full,
+                "format": e.var_format, "var_format": e.var_format,
+                "description": e.description,
+                "equipment": e.equipment,
+                "item": e.item,
+                
+                # Advanced Var
+                "rawZero": e.var_raw_zero, "rawFull": e.var_raw_full,
+                "editCode": e.editcode, "linked": e.linked, "oid": e.oid,
+                "guid": e.guid, "writeRoles": e.write_roles,
+                
+                # Trend
+                "isTrend": e.is_trend, "is_trend": e.is_trend,
+                "trendName": e.trend_name, "trend_name": e.trend_name,
+                "samplePeriod": e.trend_sample_per, "trend_sample_per": e.trend_sample_per,
+                "trendType": e.trend_type, "trend_type": e.trend_type,
+                "trendFilename": e.trend_filename, "trend_filename": e.trend_filename,
+                "trend_expr": e.trend_expr,
+                "trend_storage": e.trend_storage,
+                
+                # Alarm
+                "isAlarm": e.is_alarm, "is_alarm": e.is_alarm,
+                "alarmTag": e.alarm_tag, "alarm_tag": e.alarm_tag,
+                "alarmName": e.alarm_name, "alarm_name": e.alarm_name,
+                "alarmCategory": e.alarm_category, "alarm_category": e.alarm_category,
+                "alarm_desc": e.alarm_desc,
+                "alarm_help": e.alarm_help, "alarm_area": e.alarm_area,
+                "alarm_delay": e.alarm_delay, "alarm_priv": e.alarm_priv
+            }
+            tags.append(t)
+        
+        # Check ProjectState for updated_at
+        state = db.query(ProjectState).filter(ProjectState.project_path == path).first()
+        updated_at = state.updated_at if state else ""
+        return {"found": True, "tags": tags, "updated_at": updated_at}
+        
+    # Fallback to legacy JSON blob
     state = db.query(ProjectState).filter(ProjectState.project_path == path).first()
     if not state:
         return {"found": False}
     return {"found": True, "tags": json.loads(state.tags_json), "updated_at": state.updated_at}
-
-@app.post("/api/state")
-def save_project_state(request: StateRequest, db: Session = Depends(get_db)):
-    state = db.query(ProjectState).filter(ProjectState.project_path == request.project_path).first()
-    timestamp = datetime.datetime.now().isoformat()
-    tags_str = json.dumps(request.tags)
-    
-    if state:
-        state.tags_json = tags_str
-        state.updated_at = timestamp
-    else:
-        state = ProjectState(project_path=request.project_path, tags_json=tags_str, updated_at=timestamp)
-        db.add(state)
-    
-    db.commit()
-    return {"status": "saved", "timestamp": timestamp}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
