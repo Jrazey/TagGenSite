@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import TagGrid from './components/TagGrid'
 import DiffModal from './components/DiffModal'
+import ImportDiffModal from './components/ImportDiffModal'
 import SettingsModal from './components/SettingsModal'
 import DBFPreviewModal from './components/DBFPreviewModal'
 import UDTBuilderModal from './components/UDTBuilderModal'
@@ -15,6 +16,10 @@ function App() {
   const [diff, setDiff] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  // Import preview state
+  const [isImportPreviewOpen, setIsImportPreviewOpen] = useState(false);
+  const [importIncomingTags, setImportIncomingTags] = useState([]);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isUDTBuilderOpen, setIsUDTBuilderOpen] = useState(false);
@@ -163,20 +168,27 @@ function App() {
 
   const handleImport = async () => {
     if (!selectedProject) return;
-    if (!confirm("Importing will overwrite current tags with data from DBF files. Any unsaved changes will be lost. Continue?")) return;
 
     try {
       const res = await axios.post('http://127.0.0.1:8000/api/import', {
         project_path: selectedProject.path
       });
 
-      if (gridRef.current) {
-        gridRef.current.importTags(res.data);
-      }
+      // Store incoming tags and show preview modal
+      setImportIncomingTags(res.data);
+      setIsImportPreviewOpen(true);
     } catch (e) {
       console.error("Import failed:", e);
       alert("Import failed. Check console.");
     }
+  };
+
+  const handleImportConfirm = (resultTags) => {
+    if (gridRef.current) {
+      gridRef.current.importTags(resultTags);
+    }
+    setIsImportPreviewOpen(false);
+    setImportIncomingTags([]);
   };
 
   const confirmWrite = async () => {
@@ -267,6 +279,14 @@ function App() {
       <UDTBuilderModal
         isOpen={isUDTBuilderOpen}
         onClose={() => setIsUDTBuilderOpen(false)}
+      />
+
+      <ImportDiffModal
+        isOpen={isImportPreviewOpen}
+        onClose={() => setIsImportPreviewOpen(false)}
+        currentTags={gridRef.current?.getTags() || []}
+        incomingTags={importIncomingTags}
+        onConfirm={handleImportConfirm}
       />
     </>
   )
