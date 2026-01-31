@@ -9,6 +9,14 @@
 - **UDT Support:** Define "Virtual Parents" (UDT Instances) that automatically generate child member tags based on defined templates.
 - **Full Fidelity:** Preserves all DBF fields (including extended Trend/Alarm parameters) to ensure no data is lost during round-trip operations.
 - **Smart Filtering:** Advanced filtering, sorting, and grouping by Cluster, Equipment, or Tag Type.
+- **Cascading Delete:** Deleting a UDT instance automatically removes all its generated member tags to keep your grid clean.
+
+### ⚙️ Defaults & Auto-Fill
+- **Variable Defaults:** Configure default *Cluster* and *IO Device* to auto-fill when creating new tags.
+- **Trend/Alarm Defaults:** Set global defaults for sample periods, storage methods, alarm priorities, etc.
+- **Smart Auto-Fill:** Ticking "Trend?" or "Alarm?" automatically populates fields from your defaults.
+- **Filename Generation:** Trend filenames are automatically generated using a configurable prefix pattern (e.g. `[DATA]:Prefix\TagName\TagName`).
+- **One-Click Clear:** Unchecking Trend/Alarm options instantly clears all related fields.
 
 ### ⚡ Generation & Reconciliation
 - **Template Engine:** Uses a flexible template system to expand UDT instances into concrete tags.
@@ -89,17 +97,19 @@ npm run dev
 
 ## Usage Workflow
 
-1. **Select Project:** Enter the root path of your SCADA project containing the DBF files.
-2. **Import Data:** Click **"Import DBF"** to load existing Variable, Trend, and Alarm data.
-3. **Manage UDTs:**
+1. **Configure Defaults:** Open Settings (⚙️) to set your Project Defaults for IO Device, Trends, and Alarms.
+2. **Select Project:** Enter the root path of your SCADA project containing the DBF files.
+3. **Import Data:** Click **"Import DBF"** to load existing Variable, Trend, and Alarm data.
+4. **Manage UDTs:**
    - Create "UDT Instances" (Virtual Parents).
    - Assign a "Type" (e.g., `MOTOR`, `VALVE`) to generate member tags.
-4. **Edit & Override:**
+5. **Edit & Override:**
    - Edit generated tags directly if specific deviations are needed.
    - Toggle the lock icon to enable "Manual Override" for specific rows.
-5. **Generate & Sync:**
+   - Use "Add Tag" to create single tags with your configured defaults.
+6. **Generate & Sync:**
    - Click **"Generate Tags"**.
-   - Review the **Diff Modal** to see exactly what will change on disk.
+   - Review the **Diff Modal** (VS Code style side-by-side view) to see exactly what will change.
    - Confirm to write back to the DBF files.
 
 ## Project Structure

@@ -91,7 +91,10 @@ const SettingsModal = ({ isOpen, onClose, project }) => {
                     {activeTab === 'variable' && (
                         <div className="grid-form">
                             <GroupHeader title="Identification" />
-                            <Field label="Default Cluster" field="cluster" val={settings} onChange={handleChange} />
+                            <div style={{ display: 'flex', gap: 10 }}>
+                                <Field label="Default Cluster" field="cluster" val={settings} onChange={handleChange} style={{ flex: 1 }} />
+                                <Field label="Default IO Device" field="io_device" val={settings} onChange={handleChange} style={{ flex: 1 }} />
+                            </div>
 
                             <GroupHeader title="Data Type & Eng Units" />
                             <div style={{ display: 'flex', gap: 10 }}>

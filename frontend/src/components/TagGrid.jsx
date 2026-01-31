@@ -335,6 +335,43 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                 }
             }
 
+            // Clear trend fields when is_trend is unchecked
+            if (field === 'is_trend' && !checked) {
+                row.trend_name = '';
+                row.trend_expr = '';
+                row.trend_sample_per = '';
+                row.trend_type = '';
+                row.trend_deadband = '';
+                row.trend_files = '';
+                row.trend_time = '';
+                row.trend_period_rec = '';
+                row.trend_storage = '';
+                row.trend_stormethod = '';
+                row.trend_filename = '';
+                row.trend_trig = '';
+            }
+
+            // Auto-fill alarm defaults when is_alarm is enabled
+            if (field === 'is_alarm' && checked && defaults) {
+                const tagName = row.name || row.alarm_tag || '';
+                row.alarm_tag = row.alarm_tag || tagName;
+                row.alarm_category = row.alarm_category || defaults.alarm_category || '';
+                row.alarm_area = row.alarm_area || defaults.alarm_area || '';
+                row.alarm_priv = row.alarm_priv || defaults.alarm_priority || '';
+                row.alarm_help = row.alarm_help || defaults.alarm_help || '';
+            }
+
+            // Clear alarm fields when is_alarm is unchecked
+            if (field === 'is_alarm' && !checked) {
+                row.alarm_tag = '';
+                row.alarm_desc = '';
+                row.alarm_category = '';
+                row.alarm_help = '';
+                row.alarm_area = '';
+                row.alarm_priv = '';
+                row.alarm_delay = '';
+            }
+
             newData[rowIndex] = row;
             return newData;
         });
@@ -833,6 +870,7 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                     setData([{
                         id: Date.now(), type: 'single',
                         cluster: defaults?.cluster || 'Cluster1',
+                        io_device: defaults?.io_device || '',
                         udt_type: 'Single',
                         name: 'New_Tag',
                         address: '', citectName: 'New_Tag',

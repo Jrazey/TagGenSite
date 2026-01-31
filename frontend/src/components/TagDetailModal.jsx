@@ -9,7 +9,11 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
     const [activeTab, setActiveTab] = useState('other'); // Default to Shared
 
     useEffect(() => {
-        setFormData({ ...tag });
+        setFormData({
+            ...tag,
+            // Ensure cluster has a default value matching grid display
+            cluster: tag.cluster || 'Cluster1'
+        });
     }, [tag]);
 
     const handleChange = (field, value) => {
