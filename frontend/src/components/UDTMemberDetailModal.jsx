@@ -131,9 +131,13 @@ const UDTMemberDetailModal = ({ isOpen, member, onSave, onClose }) => {
                                         </div>
                                         <div className="form-field">
                                             <label>Storage Method</label>
-                                            <select value={data.trend_storage || 'Scaled'} onChange={e => setData({ ...data, trend_storage: e.target.value })}>
-                                                <option value="Scaled">Scaled (2-byte)</option>
-                                                <option value="Floating Point">Floating Point (8-byte)</option>
+                                            <select
+                                                value={data.trend_storage || data.trend_stormethod || ''}
+                                                onChange={e => setData({ ...data, trend_storage: e.target.value, trend_stormethod: e.target.value })}
+                                            >
+                                                <option value="" style={{ background: '#333', color: 'white' }}></option>
+                                                <option value="Scaled (2-byte samples)" style={{ background: '#333', color: 'white' }}>Scaled (2-byte samples)</option>
+                                                <option value="Floating point (8-byte samples)" style={{ background: '#333', color: 'white' }}>Floating point (8-byte samples)</option>
                                             </select>
                                         </div>
                                     </div>

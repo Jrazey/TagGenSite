@@ -69,6 +69,24 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
         </div>
     );
 
+    const SelectField = ({ label, field, options, width }) => (
+        <div style={{ flex: width ? 'none' : 1, width: width, marginBottom: 12 }}>
+            <label style={labelStyle}>{label}</label>
+            <select
+                value={formData[field] || formData.trend_stormethod || ''}
+                onChange={e => {
+                    handleChange(field, e.target.value);
+                    handleChange('trend_stormethod', e.target.value);
+                }}
+                style={{ ...inputStyle, cursor: 'pointer' }}
+            >
+                {options.map(opt => (
+                    <option key={opt.value} value={opt.value} style={{ background: '#333', color: 'white' }}>{opt.label}</option>
+                ))}
+            </select>
+        </div>
+    );
+
     return (
         <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -210,7 +228,15 @@ const TagDetailModal = ({ isOpen, onClose, tag, onSave }) => {
                                         <Field label="Period" field="trend_period_rec" />
                                     </div>
                                     <div style={rowStyle}>
-                                        <Field label="Storage Method" field="trend_storage" />
+                                        <SelectField
+                                            label="Storage Method"
+                                            field="trend_storage"
+                                            options={[
+                                                { value: '', label: '' },
+                                                { value: 'Scaled (2-byte samples)', label: 'Scaled (2-byte samples)' },
+                                                { value: 'Floating point (8-byte samples)', label: 'Floating point (8-byte samples)' }
+                                            ]}
+                                        />
                                     </div>
                                 </>
                             ) : <div style={{ opacity: 0.5 }}>Check "Enable Trending" to configure.</div>}

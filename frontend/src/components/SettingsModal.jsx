@@ -111,11 +111,26 @@ const SettingsModal = ({ isOpen, onClose, project }) => {
                             <div style={{ marginBottom: 16, color: '#888', fontStyle: 'italic' }}>
                                 Values here will autofill when you check "Trend?" on a tag.
                             </div>
-                            <Field label="Trend Type" field="trend_type" val={settings} onChange={handleChange} placeholder="TRN_PERIODIC" />
-                            <Field label="Sample Period" field="sample_period" val={settings} onChange={handleChange} placeholder="00:00:01" />
-                            <Field label="Trend Storage" field="trend_storage" val={settings} onChange={handleChange} placeholder="Scaled" />
-                            <Field label="Files" field="trend_files" val={settings} onChange={handleChange} placeholder="[-1] 52" />
-                            <Field label="No. Files" field="no_files" val={settings} onChange={handleChange} placeholder="2" />
+                            <GroupHeader title="Trend Identification" />
+                            <Field label="Trend Prefix" field="trend_prefix" val={settings} onChange={handleChange} placeholder="e.g. Trends\\ProjectName" />
+                            <div style={{ fontSize: '0.75rem', color: '#666', marginBottom: 12, marginTop: -8 }}>
+                                Used to auto-generate filename: [DATA]:{'{trend_prefix}'}\\{'{TagName}'}\\{'{TagName}'}
+                            </div>
+
+                            <GroupHeader title="Sampling" />
+                            <div style={{ display: 'flex', gap: 10 }}>
+                                <Field label="Trend Type" field="trend_type" val={settings} onChange={handleChange} placeholder="TRN_PERIODIC" style={{ flex: 1 }} />
+                                <Field label="Sample Period" field="sample_period" val={settings} onChange={handleChange} placeholder="1" style={{ flex: 1 }} />
+                            </div>
+                            <Field label="Deadband" field="trend_deadband" val={settings} onChange={handleChange} placeholder="0" />
+
+                            <GroupHeader title="Storage" />
+                            <div style={{ display: 'flex', gap: 10 }}>
+                                <Field label="Num Files" field="trend_numfiles" val={settings} onChange={handleChange} placeholder="25" style={{ flex: 1 }} />
+                                <Field label="Time" field="trend_time" val={settings} onChange={handleChange} placeholder="0" style={{ flex: 1 }} />
+                            </div>
+                            <Field label="Period" field="trend_period" val={settings} onChange={handleChange} placeholder="Saturday" />
+                            <Field label="Storage Method" field="trend_storage" val={settings} onChange={handleChange} placeholder="Scaled (2-byte samples)" />
                         </div>
                     )}
 

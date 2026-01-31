@@ -100,7 +100,13 @@ class DBFWriter:
                             break
                             
                 if is_modified:
-                    diff["modified"].append(record)
+                    # Return both existing and proposed for side-by-side comparison
+                    diff["modified"].append({
+                        "existing": existing_rec,
+                        "proposed": record,
+                        "changed_fields": [k for k, v in record.items() 
+                                          if k in existing_rec and str(v).strip() != existing_rec[k]]
+                    })
                 else:
                     diff["unchanged"].append(record)
             else:
@@ -149,8 +155,16 @@ class DBFWriter:
             if val in orphaned_names:
                 dbf.delete(record)
                 
-        # 4. Process Modified
-        mod_map = {r[key_field]: r for r in diff["modified"]}
+        # 4. Process Modified (extract 'proposed' from new structure)
+        mod_map = {}
+        for m in diff["modified"]:
+            # Handle both old format (direct record) and new format (existing/proposed/changed_fields)
+            if isinstance(m, dict) and "proposed" in m:
+                rec = m["proposed"]
+            else:
+                rec = m
+            mod_map[rec[key_field]] = rec
+            
         if mod_map:
              for record in table:
                 if dbf.is_deleted(record): continue

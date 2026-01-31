@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { useReactTable, getCoreRowModel, getExpandedRowModel, getSortedRowModel, getFilteredRowModel, flexRender } from '@tanstack/react-table';
 import axios from 'axios';
-import { ChevronRight, ChevronDown, Plus, Lock, Unlock, ArrowUpDown, Search } from 'lucide-react';
+import { ChevronRight, ChevronDown, Plus, Lock, Unlock, ArrowUpDown, Search, Trash2 } from 'lucide-react';
 import TagDetailModal from './TagDetailModal';
 
 const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
@@ -311,6 +311,30 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
         setData(prev => {
             const newData = [...prev];
             const row = { ...newData[rowIndex], [field]: checked };
+
+            // Auto-fill trend defaults when is_trend is enabled
+            if (field === 'is_trend' && checked && defaults) {
+                const tagName = row.name || row.trend_name || '';
+                const trendPrefix = defaults.trend_prefix || 'Trends';
+
+                // Auto-generate trend fields from defaults
+                row.trend_name = row.trend_name || tagName;
+                row.trend_expr = row.trend_expr || tagName;
+                row.trend_sample_per = row.trend_sample_per || defaults.sample_period || '1';
+                row.trend_type = row.trend_type || defaults.trend_type || 'TRN_PERIODIC';
+                row.trend_deadband = row.trend_deadband || defaults.trend_deadband || '';
+                row.trend_files = row.trend_files || defaults.trend_numfiles || '25';
+                row.trend_time = row.trend_time || defaults.trend_time || '0';
+                row.trend_period_rec = row.trend_period_rec || defaults.trend_period || 'Saturday';
+                row.trend_storage = row.trend_storage || row.trend_stormethod || defaults.trend_storage || 'Scaled (2-byte samples)';
+                row.trend_stormethod = row.trend_storage;
+
+                // Auto-generate filename: [DATA]:{trend_prefix}\{TagName}\{TagName}
+                if (!row.trend_filename && tagName) {
+                    row.trend_filename = `[DATA]:${trendPrefix}\\${tagName}\\${tagName}`;
+                }
+            }
+
             newData[rowIndex] = row;
             return newData;
         });
@@ -322,6 +346,28 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
             const row = { ...newData[rowIndex], [field]: value };
             newData[rowIndex] = row;
             return newData;
+        });
+    };
+
+    const handleDeleteRow = (rowIndex) => {
+        setData(prev => {
+            const row = prev[rowIndex];
+
+            // If it's a UDT instance, also delete all its members (subRows)
+            if (row.entry_type === 'udt_instance' && row.subRows?.length > 0) {
+                // Get the UDT's name to match members
+                const udtName = row.name;
+                // Filter out the UDT and any members that belong to it
+                return prev.filter((r, i) => {
+                    if (i === rowIndex) return false; // Remove the UDT itself
+                    // Remove members that belong to this UDT (parent_udt matches)
+                    if (r.entry_type === 'member' && r.parent_udt === udtName) return false;
+                    return true;
+                });
+            }
+
+            // For single tags or members, just remove that row
+            return prev.filter((_, i) => i !== rowIndex);
         });
     };
 
@@ -385,6 +431,40 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
             ),
             size: 30,
             meta: { stickyWith: 0 }
+        },
+        {
+            id: 'delete',
+            header: () => null,
+            cell: ({ row }) => {
+                // Don't show delete for member rows (they're deleted with their parent UDT)
+                if (row.original.entry_type === 'member') return null;
+
+                return (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Delete "${row.original.name || 'this row'}"?${row.original.entry_type === 'udt_instance' ? ' This will also delete all members.' : ''}`)) {
+                                handleDeleteRow(row.index);
+                            }
+                        }}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 2,
+                            cursor: 'pointer',
+                            color: '#666',
+                            opacity: 0.6,
+                            transition: 'opacity 0.15s, color 0.15s'
+                        }}
+                        onMouseEnter={(e) => { e.target.style.opacity = 1; e.target.style.color = '#e55'; }}
+                        onMouseLeave={(e) => { e.target.style.opacity = 0.6; e.target.style.color = '#666'; }}
+                        title="Delete row"
+                    >
+                        <Trash2 size={14} />
+                    </button>
+                );
+            },
+            size: 28
         },
         // --- IDENTIFICATION ---
         {
@@ -609,7 +689,26 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                     size: 140
                 },
                 { accessorKey: 'trend_filename', header: 'File', cell: cellProps => <SimpleInput {...cellProps} field="trend_filename" />, size: 100 },
-                { accessorKey: 'trend_storage', header: 'Storage', cell: cellProps => <SimpleInput {...cellProps} field="trend_storage" />, size: 100 },
+                {
+                    accessorKey: 'trend_storage',
+                    header: 'Storage',
+                    cell: ({ getValue, row }) => {
+                        const isTrend = row.original.is_trend;
+                        return (
+                            <select
+                                value={getValue() || row.original.trend_stormethod || ''}
+                                onChange={(e) => handleFieldChange(row.index, 'trend_storage', e.target.value)}
+                                style={{ background: 'transparent', border: 'none', color: isTrend ? 'var(--accent-color)' : '#666', width: '100%' }}
+                                disabled={!isTrend}
+                            >
+                                <option value="" style={{ background: '#333', color: 'white' }}></option>
+                                <option value="Scaled (2-byte samples)" style={{ background: '#333', color: 'white' }}>Scaled (2-byte)</option>
+                                <option value="Floating point (8-byte samples)" style={{ background: '#333', color: 'white' }}>Floating point (8-byte)</option>
+                            </select>
+                        );
+                    },
+                    size: 180
+                },
                 { accessorKey: 'trend_area', header: 'Area', cell: cellProps => <SimpleInput {...cellProps} field="trend_area" />, size: 60 },
                 { accessorKey: 'trend_priv', header: 'Priv', cell: cellProps => <SimpleInput {...cellProps} field="trend_priv" />, size: 60 },
             ]
@@ -671,7 +770,22 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                 { accessorKey: 'deadband', header: 'Deadband', cell: cellProps => <SimpleInput {...cellProps} field="deadband" />, size: 80 },
                 { accessorKey: 'custom', header: 'Custom', cell: cellProps => <SimpleInput {...cellProps} field="custom" />, size: 100 },
                 { accessorKey: 'tagGenLink', header: 'TagGen Link', cell: cellProps => <SimpleInput {...cellProps} field="tagGenLink" />, size: 100 },
-                { accessorKey: 'historian', header: 'Historian', cell: cellProps => <SimpleInput {...cellProps} field="historian" />, size: 80 },
+                {
+                    accessorKey: 'historian',
+                    header: 'Historian',
+                    cell: ({ getValue, row }) => (
+                        <select
+                            value={getValue() || ''}
+                            onChange={(e) => handleFieldChange(row.index, 'historian', e.target.value)}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--accent-color)', width: '100%' }}
+                        >
+                            <option value="" style={{ background: '#333', color: 'white' }}></option>
+                            <option value="TRUE" style={{ background: '#333', color: 'white' }}>TRUE</option>
+                            <option value="FALSE" style={{ background: '#333', color: 'white' }}>FALSE</option>
+                        </select>
+                    ),
+                    size: 100
+                },
                 { accessorKey: 'writeRoles', header: 'Write Roles', cell: cellProps => <SimpleInput {...cellProps} field="writeRoles" />, size: 100 },
                 { accessorKey: 'guid', header: 'GUID', cell: cellProps => <SimpleInput {...cellProps} field="guid" readOnly={true} />, size: 250 },
                 // Custom 1-8
