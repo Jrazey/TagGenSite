@@ -206,7 +206,7 @@ function App() {
           </button>
           <div style={{ width: 1, background: '#555', margin: '0 4px' }}></div>
           <button onClick={handleSave} title="Save to Database">
-            <span style={{ marginRight: 4 }}>💾</span> Save
+            Save
           </button>
           <button onClick={handleImport} title="Import from DBF">
             <Download size={18} style={{ marginRight: 4 }} /> Re-Import

@@ -716,7 +716,7 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
         <div>
             <div style={{ marginBottom: 8, display: 'flex', gap: 8 }}>
                 <button onClick={() => {
-                    setData([...data, {
+                    setData([{
                         id: Date.now(), type: 'single',
                         cluster: defaults?.cluster || 'Cluster1',
                         udt_type: 'Single',
@@ -731,7 +731,7 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                         description: '',
                         equipment: '', item: 'Value',
                         subRows: []
-                    }])
+                    }, ...data])
                 }}>
                     <Plus size={14} style={{ marginRight: 4 }} /> Add Tag
                 </button>
