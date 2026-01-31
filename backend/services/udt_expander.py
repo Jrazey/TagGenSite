@@ -108,6 +108,12 @@ class UDTExpander:
             is_override = entry.get("is_manual_override", False)
             entry_type = entry.get("entry_type", "single") # single, udt_instance, member
             
+            # --- VIRTUAL PARENT RULE ---
+            # UDT_INSTANCE entries are METADATA ONLY. They provide the "DNA" (prefix, base 
+            # address, is_trend, is_alarm) for generating children, but are NOT written 
+            # to DBF files themselves. Only 'single' and 'member' entries produce DBF records.
+            # UDT_INSTANCE entries are handled separately below to generate their children.
+            
             # --- SINGLE TAG or PRESERVED MEMBER ---
             # If it's a single tag OR a member that has been persisted, we use its values directly.
             # (Note: Frontend/DB flow sends flattened TagEntry objects)
