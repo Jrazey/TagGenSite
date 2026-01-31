@@ -191,13 +191,13 @@ function App() {
     setImportIncomingTags([]);
   };
 
-  const confirmWrite = async () => {
-    if (!selectedProject || !diff) return;
+  const confirmWrite = async (filteredDiff) => {
+    if (!selectedProject || !filteredDiff) return;
 
     try {
       await axios.post('http://127.0.0.1:8000/api/write', {
         project_path: selectedProject.path,
-        diff: diff
+        diff: filteredDiff
       });
       alert("Success! DBF files updated.");
       setIsModalOpen(false);

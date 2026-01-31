@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { X, Check, FileText, Activity, Bell, ChevronDown, ChevronRight } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { X, Check, FileText, Activity, Bell, ChevronDown, ChevronRight, Plus, Trash2, RefreshCw } from 'lucide-react';
 
 const DiffModal = ({ isOpen, onClose, diff, onConfirm }) => {
     if (!isOpen || !diff) return null;
@@ -8,8 +8,57 @@ const DiffModal = ({ isOpen, onClose, diff, onConfirm }) => {
     const [activeTab, setActiveTab] = useState('variable');
     const [expandedRecords, setExpandedRecords] = useState({});
 
+    // Accept/Reject state for each table type
+    // Keys: "variable_new_NAME", "variable_modified_NAME", "variable_orphaned_NAME", etc.
+    const [acceptedChanges, setAcceptedChanges] = useState({});
+
+    // Initialize all changes as accepted when diff changes
+    useEffect(() => {
+        const accepted = {};
+        ['variable', 'trend', 'digalm'].forEach(tableType => {
+            const changes = diff[tableType];
+            if (!changes) return;
+
+            changes.new?.forEach(r => {
+                const key = `${tableType}_new_${r.NAME || r.TAG}`;
+                accepted[key] = true;
+            });
+            changes.modified?.forEach(m => {
+                const key = `${tableType}_modified_${m.proposed?.NAME || m.proposed?.TAG}`;
+                accepted[key] = true;
+            });
+            changes.orphaned?.forEach(r => {
+                const key = `${tableType}_orphaned_${r.NAME || r.TAG}`;
+                accepted[key] = true;
+            });
+        });
+        setAcceptedChanges(accepted);
+    }, [diff]);
+
+    const toggleChange = (key) => {
+        setAcceptedChanges(prev => ({ ...prev, [key]: !prev[key] }));
+    };
+
     const toggleRecord = (key) => {
         setExpandedRecords(prev => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    const selectAll = (tableType, changeType, value) => {
+        setAcceptedChanges(prev => {
+            const next = { ...prev };
+            const changes = diff[tableType];
+            if (!changes) return next;
+
+            const items = changes[changeType] || [];
+            items.forEach(r => {
+                const name = changeType === 'modified'
+                    ? (r.proposed?.NAME || r.proposed?.TAG)
+                    : (r.NAME || r.TAG);
+                const key = `${tableType}_${changeType}_${name}`;
+                next[key] = value;
+            });
+            return next;
+        });
     };
 
     const tabStyle = (id) => ({
@@ -29,6 +78,14 @@ const DiffModal = ({ isOpen, onClose, diff, onConfirm }) => {
         return (changes.new?.length || 0) + (changes.modified?.length || 0) + (changes.orphaned?.length || 0);
     };
 
+    const getAcceptedCount = (tableType) => {
+        let count = 0;
+        Object.entries(acceptedChanges).forEach(([key, val]) => {
+            if (key.startsWith(tableType + '_') && val) count++;
+        });
+        return count;
+    };
+
     // Styles for diff highlighting
     const styles = {
         newRow: { background: 'rgba(50, 200, 50, 0.15)' },
@@ -40,30 +97,45 @@ const DiffModal = ({ isOpen, onClose, diff, onConfirm }) => {
             display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
             background: 'rgba(0,0,0,0.3)', cursor: 'pointer', borderRadius: 4, marginBottom: 4,
             userSelect: 'none'
+        },
+        checkbox: { width: 16, height: 16, cursor: 'pointer' },
+        sectionHeader: {
+            display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap'
         }
     };
 
     // Render side-by-side comparison for a single modified record
-    const renderModifiedRecord = (modItem, index) => {
+    const renderModifiedRecord = (modItem, index, tableType) => {
         const { existing, proposed, changed_fields } = modItem;
         const recordKey = proposed?.NAME || proposed?.TAG || `record-${index}`;
+        const acceptKey = `${tableType}_modified_${recordKey}`;
         const isExpanded = expandedRecords[recordKey] !== false; // Default expanded
+        const isAccepted = acceptedChanges[acceptKey] !== false;
 
         // Get all unique field names
         const allFields = [...new Set([...Object.keys(existing || {}), ...Object.keys(proposed || {})])];
-        // Filter to only show fields with differences, or all if toggled
+        // Filter to only show fields with differences
         const fieldsToShow = allFields.filter(f => changed_fields?.includes(f));
 
         return (
-            <div key={recordKey} style={{ marginBottom: 8 }}>
-                <div style={styles.recordHeader} onClick={() => toggleRecord(recordKey)}>
-                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    <span style={{ fontWeight: 600, color: 'var(--warning-color)' }}>{recordKey}</span>
-                    <span style={{ opacity: 0.6, fontSize: '0.8rem' }}>({changed_fields?.length || 0} changes)</span>
+            <div key={recordKey} style={{ marginBottom: 8, opacity: isAccepted ? 1 : 0.5 }}>
+                <div style={styles.recordHeader}>
+                    <input
+                        type="checkbox"
+                        checked={isAccepted}
+                        onChange={() => toggleChange(acceptKey)}
+                        onClick={(e) => e.stopPropagation()}
+                        style={styles.checkbox}
+                    />
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => toggleRecord(recordKey)}>
+                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        <span style={{ fontWeight: 600, color: 'var(--warning-color)' }}>{recordKey}</span>
+                        <span style={{ opacity: 0.6, fontSize: '0.8rem' }}>({changed_fields?.length || 0} changes)</span>
+                    </div>
                 </div>
 
                 {isExpanded && (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', marginLeft: 20 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', marginLeft: 40 }}>
                         <thead>
                             <tr style={{ borderBottom: '1px solid #333' }}>
                                 <th style={{ ...styles.fieldName, width: 150, textAlign: 'left' }}>Field</th>
@@ -111,22 +183,52 @@ const DiffModal = ({ isOpen, onClose, diff, onConfirm }) => {
         const hasChanges = (changes.new?.length || 0) > 0 || (changes.modified?.length || 0) > 0 || (changes.orphaned?.length || 0) > 0;
         if (!hasChanges) return <div style={{ padding: 20, textAlign: 'center', color: '#4a4' }}>✓ No changes detected. Files are in sync.</div>;
 
+        const countAccepted = (type) => {
+            const items = changes[type] || [];
+            return items.filter(r => {
+                const name = type === 'modified' ? (r.proposed?.NAME || r.proposed?.TAG) : (r.NAME || r.TAG);
+                return acceptedChanges[`${tableType}_${type}_${name}`] !== false;
+            }).length;
+        };
+
         return (
             <div style={{ padding: '0 16px' }}>
                 {/* NEW */}
                 {changes.new?.length > 0 && (
                     <div style={{ marginBottom: 16 }}>
-                        <h5 style={{ color: '#4a4', margin: '8px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ background: 'rgba(50, 200, 50, 0.2)', padding: '2px 8px', borderRadius: 4 }}>+ NEW</span>
-                            <span style={{ opacity: 0.6, fontWeight: 400 }}>{changes.new.length} records will be added</span>
-                        </h5>
-                        <div style={{ background: 'rgba(50, 200, 50, 0.1)', borderRadius: 4, padding: 8 }}>
-                            {changes.new.map((r, i) => (
-                                <div key={i} style={{ padding: '4px 8px', borderBottom: i < changes.new.length - 1 ? '1px solid #333' : 'none' }}>
-                                    <span style={{ fontWeight: 600, color: '#88ff88' }}>{r.NAME || r.TAG}</span>
-                                    <span style={{ marginLeft: 12, opacity: 0.7 }}>{r.COMMENT || r.DESC || ''}</span>
-                                </div>
-                            ))}
+                        <div style={styles.sectionHeader}>
+                            <Plus size={16} style={{ color: '#4a4' }} />
+                            <span style={{ background: 'rgba(50, 200, 50, 0.2)', padding: '2px 8px', borderRadius: 4, color: '#4a4' }}>+ NEW</span>
+                            <span style={{ opacity: 0.6, fontWeight: 400 }}>{countAccepted('new')}/{changes.new.length} will be written</span>
+                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                                <button onClick={() => selectAll(tableType, 'new', true)}
+                                    style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#2a2a2a', border: '1px solid #444', borderRadius: 3, color: '#4a4', cursor: 'pointer' }}>
+                                    Accept All
+                                </button>
+                                <button onClick={() => selectAll(tableType, 'new', false)}
+                                    style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#2a2a2a', border: '1px solid #444', borderRadius: 3, color: '#a44', cursor: 'pointer' }}>
+                                    Reject All
+                                </button>
+                            </div>
+                        </div>
+                        <div style={{ background: 'rgba(50, 200, 50, 0.05)', borderRadius: 4, padding: 8, border: '1px solid #333' }}>
+                            {changes.new.map((r, i) => {
+                                const name = r.NAME || r.TAG;
+                                const key = `${tableType}_new_${name}`;
+                                const isAccepted = acceptedChanges[key] !== false;
+                                return (
+                                    <div key={i} style={{
+                                        padding: '6px 8px',
+                                        borderBottom: i < changes.new.length - 1 ? '1px solid #333' : 'none',
+                                        display: 'flex', alignItems: 'center', gap: 10,
+                                        opacity: isAccepted ? 1 : 0.5
+                                    }}>
+                                        <input type="checkbox" checked={isAccepted} onChange={() => toggleChange(key)} style={styles.checkbox} />
+                                        <span style={{ fontWeight: 600, color: '#88ff88' }}>+ {name}</span>
+                                        <span style={{ marginLeft: 12, opacity: 0.7 }}>{r.COMMENT || r.DESC || ''}</span>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}
@@ -134,12 +236,23 @@ const DiffModal = ({ isOpen, onClose, diff, onConfirm }) => {
                 {/* MODIFIED - Side-by-Side */}
                 {changes.modified?.length > 0 && (
                     <div style={{ marginBottom: 16 }}>
-                        <h5 style={{ color: '#ca4', margin: '8px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ background: 'rgba(255, 200, 0, 0.2)', padding: '2px 8px', borderRadius: 4 }}>~ MODIFIED</span>
-                            <span style={{ opacity: 0.6, fontWeight: 400 }}>{changes.modified.length} records will be updated</span>
-                        </h5>
+                        <div style={styles.sectionHeader}>
+                            <RefreshCw size={16} style={{ color: '#ca4' }} />
+                            <span style={{ background: 'rgba(255, 200, 0, 0.2)', padding: '2px 8px', borderRadius: 4, color: '#ca4' }}>~ MODIFIED</span>
+                            <span style={{ opacity: 0.6, fontWeight: 400 }}>{countAccepted('modified')}/{changes.modified.length} will be updated</span>
+                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                                <button onClick={() => selectAll(tableType, 'modified', true)}
+                                    style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#2a2a2a', border: '1px solid #444', borderRadius: 3, color: '#ca4', cursor: 'pointer' }}>
+                                    Accept All
+                                </button>
+                                <button onClick={() => selectAll(tableType, 'modified', false)}
+                                    style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#2a2a2a', border: '1px solid #444', borderRadius: 3, color: '#666', cursor: 'pointer' }}>
+                                    Keep Existing
+                                </button>
+                            </div>
+                        </div>
                         <div style={{ maxHeight: 400, overflowY: 'auto' }}>
-                            {changes.modified.map((modItem, i) => renderModifiedRecord(modItem, i))}
+                            {changes.modified.map((modItem, i) => renderModifiedRecord(modItem, i, tableType))}
                         </div>
                     </div>
                 )}
@@ -147,22 +260,77 @@ const DiffModal = ({ isOpen, onClose, diff, onConfirm }) => {
                 {/* ORPHANED */}
                 {changes.orphaned?.length > 0 && (
                     <div style={{ marginBottom: 16 }}>
-                        <h5 style={{ color: '#a44', margin: '8px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ background: 'rgba(200, 50, 50, 0.2)', padding: '2px 8px', borderRadius: 4 }}>- ORPHANED</span>
-                            <span style={{ opacity: 0.6, fontWeight: 400 }}>{changes.orphaned.length} records will be removed</span>
-                        </h5>
-                        <div style={{ background: 'rgba(200, 50, 50, 0.1)', borderRadius: 4, padding: 8 }}>
-                            {changes.orphaned.map((r, i) => (
-                                <div key={i} style={{ padding: '4px 8px', borderBottom: i < changes.orphaned.length - 1 ? '1px solid #333' : 'none' }}>
-                                    <span style={{ color: '#ff8888', textDecoration: 'line-through' }}>{r.NAME || r.TAG}</span>
-                                </div>
-                            ))}
+                        <div style={styles.sectionHeader}>
+                            <Trash2 size={16} style={{ color: '#a44' }} />
+                            <span style={{ background: 'rgba(200, 50, 50, 0.2)', padding: '2px 8px', borderRadius: 4, color: '#a44' }}>- ORPHANED</span>
+                            <span style={{ opacity: 0.6, fontWeight: 400 }}>{countAccepted('orphaned')}/{changes.orphaned.length} will be removed</span>
+                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                                <button onClick={() => selectAll(tableType, 'orphaned', true)}
+                                    style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#2a2a2a', border: '1px solid #444', borderRadius: 3, color: '#a44', cursor: 'pointer' }}>
+                                    Remove All
+                                </button>
+                                <button onClick={() => selectAll(tableType, 'orphaned', false)}
+                                    style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#2a2a2a', border: '1px solid #444', borderRadius: 3, color: '#4a4', cursor: 'pointer' }}>
+                                    Keep All
+                                </button>
+                            </div>
+                        </div>
+                        <div style={{ background: 'rgba(200, 50, 50, 0.05)', borderRadius: 4, padding: 8, border: '1px solid #333' }}>
+                            {changes.orphaned.map((r, i) => {
+                                const name = r.NAME || r.TAG;
+                                const key = `${tableType}_orphaned_${name}`;
+                                const isAccepted = acceptedChanges[key] !== false;
+                                return (
+                                    <div key={i} style={{
+                                        padding: '6px 8px',
+                                        borderBottom: i < changes.orphaned.length - 1 ? '1px solid #333' : 'none',
+                                        display: 'flex', alignItems: 'center', gap: 10,
+                                        opacity: isAccepted ? 1 : 0.5
+                                    }}>
+                                        <input type="checkbox" checked={isAccepted} onChange={() => toggleChange(key)} style={styles.checkbox} />
+                                        <span style={{ color: isAccepted ? '#ff8888' : '#888', textDecoration: isAccepted ? 'line-through' : 'none' }}>
+                                            − {name}
+                                        </span>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}
             </div>
         );
     };
+
+    // Build filtered diff based on accepted changes
+    const handleConfirm = () => {
+        const filteredDiff = {};
+
+        ['variable', 'trend', 'digalm'].forEach(tableType => {
+            const changes = diff[tableType];
+            if (!changes) return;
+
+            filteredDiff[tableType] = {
+                new: (changes.new || []).filter(r => {
+                    const key = `${tableType}_new_${r.NAME || r.TAG}`;
+                    return acceptedChanges[key] !== false;
+                }),
+                modified: (changes.modified || []).filter(m => {
+                    const key = `${tableType}_modified_${m.proposed?.NAME || m.proposed?.TAG}`;
+                    return acceptedChanges[key] !== false;
+                }),
+                orphaned: (changes.orphaned || []).filter(r => {
+                    const key = `${tableType}_orphaned_${r.NAME || r.TAG}`;
+                    return acceptedChanges[key] !== false;
+                })
+            };
+        });
+
+        onConfirm(filteredDiff);
+    };
+
+    // Calculate total stats
+    const totalChanges = ['variable', 'trend', 'digalm'].reduce((acc, t) => acc + getChangeCount(t), 0);
+    const totalAccepted = ['variable', 'trend', 'digalm'].reduce((acc, t) => acc + getAcceptedCount(t), 0);
 
     return (
         <div style={{
@@ -177,9 +345,14 @@ const DiffModal = ({ isOpen, onClose, diff, onConfirm }) => {
             }}>
                 {/* Header */}
                 <div style={{ padding: '16px 20px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <FileText size={20} /> Review Changes
-                    </h3>
+                    <div>
+                        <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <FileText size={20} /> Review Changes
+                        </h3>
+                        <div style={{ fontSize: '0.85rem', color: '#888', marginTop: 4 }}>
+                            {totalAccepted} of {totalChanges} changes will be applied
+                        </div>
+                    </div>
                     <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}><X size={20} /></button>
                 </div>
 
@@ -189,7 +362,7 @@ const DiffModal = ({ isOpen, onClose, diff, onConfirm }) => {
                         <FileText size={14} /> Variable.dbf
                         {getChangeCount('variable') > 0 && (
                             <span style={{ background: 'var(--accent-color)', color: 'black', padding: '1px 6px', borderRadius: 10, fontSize: '0.7rem', fontWeight: 700 }}>
-                                {getChangeCount('variable')}
+                                {getAcceptedCount('variable')}/{getChangeCount('variable')}
                             </span>
                         )}
                     </div>
@@ -197,7 +370,7 @@ const DiffModal = ({ isOpen, onClose, diff, onConfirm }) => {
                         <Activity size={14} /> Trend.dbf
                         {getChangeCount('trend') > 0 && (
                             <span style={{ background: 'var(--accent-color)', color: 'black', padding: '1px 6px', borderRadius: 10, fontSize: '0.7rem', fontWeight: 700 }}>
-                                {getChangeCount('trend')}
+                                {getAcceptedCount('trend')}/{getChangeCount('trend')}
                             </span>
                         )}
                     </div>
@@ -205,7 +378,7 @@ const DiffModal = ({ isOpen, onClose, diff, onConfirm }) => {
                         <Bell size={14} /> DigAlm.dbf
                         {getChangeCount('digalm') > 0 && (
                             <span style={{ background: 'var(--accent-color)', color: 'black', padding: '1px 6px', borderRadius: 10, fontSize: '0.7rem', fontWeight: 700 }}>
-                                {getChangeCount('digalm')}
+                                {getAcceptedCount('digalm')}/{getChangeCount('digalm')}
                             </span>
                         )}
                     </div>
@@ -217,11 +390,16 @@ const DiffModal = ({ isOpen, onClose, diff, onConfirm }) => {
                 </div>
 
                 {/* Footer */}
-                <div style={{ padding: '16px 20px', borderTop: '1px solid #333', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: 'rgba(0,0,0,0.2)' }}>
-                    <button onClick={onClose} style={{ minWidth: 100, padding: '8px 16px' }}>Cancel</button>
-                    <button className="primary" onClick={onConfirm} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 140, justifyContent: 'center', padding: '8px 16px' }}>
-                        <Check size={16} /> Confirm Write
-                    </button>
+                <div style={{ padding: '16px 20px', borderTop: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)' }}>
+                    <div style={{ fontSize: '0.85rem', color: '#888' }}>
+                        {totalAccepted} of {totalChanges} changes will be written to DBF files
+                    </div>
+                    <div style={{ display: 'flex', gap: 12 }}>
+                        <button onClick={onClose} style={{ minWidth: 100, padding: '8px 16px' }}>Cancel</button>
+                        <button className="primary" onClick={handleConfirm} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 140, justifyContent: 'center', padding: '8px 16px' }}>
+                            <Check size={16} /> Confirm Write
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
