@@ -541,8 +541,8 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                         }
 
                         return (
-                            <select value={getValue()} onChange={(e) => handleFieldChange(row.index, 'type', e.target.value)} style={{ background: 'transparent', border: 'none', width: '100%' }}>
-                                {['DIGITAL', 'INT', 'REAL', 'STRING', 'UINT', 'LONG', 'BYTE'].map(t => <option key={t} value={t}>{t}</option>)}
+                            <select value={getValue()} onChange={(e) => handleFieldChange(row.index, 'type', e.target.value)} style={{ background: 'transparent', border: 'none', width: '100%', color: 'white' }}>
+                                {['DIGITAL', 'INT', 'REAL', 'STRING', 'UINT', 'LONG', 'BYTE'].map(t => <option key={t} value={t} style={{ background: '#333', color: 'white' }}>{t}</option>)}
                             </select>
                         );
                     },
@@ -582,7 +582,22 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                 { accessorKey: 'trend_expr', header: 'Expression', cell: cellProps => <SimpleInput {...cellProps} field="trend_expr" />, size: 140 },
                 { accessorKey: 'trend_sample_per', header: 'Period', cell: cellProps => <SimpleInput {...cellProps} field="trend_sample_per" />, size: 80 },
                 { accessorKey: 'trend_trig', header: 'Trigger', cell: cellProps => <SimpleInput {...cellProps} field="trend_trig" />, size: 100 },
-                { accessorKey: 'trend_type', header: 'Type', cell: cellProps => <SimpleInput {...cellProps} field="trend_type" />, size: 100 },
+                {
+                    accessorKey: 'trend_type',
+                    header: 'Type',
+                    cell: ({ getValue, row }) => (
+                        <select
+                            value={getValue() || 'TRN_PERIODIC'}
+                            onChange={(e) => handleFieldChange(row.index, 'trend_type', e.target.value)}
+                            style={{ background: 'transparent', border: 'none', width: '100%', color: 'white' }}
+                        >
+                            <option value="TRN_EVENT" style={{ background: '#333', color: 'white' }}>TRN_EVENT</option>
+                            <option value="TRN_PERIODIC" style={{ background: '#333', color: 'white' }}>TRN_PERIODIC</option>
+                            <option value="TRN_PERIODIC_EVENT" style={{ background: '#333', color: 'white' }}>TRN_PERIODIC_EVENT</option>
+                        </select>
+                    ),
+                    size: 140
+                },
                 { accessorKey: 'trend_filename', header: 'File', cell: cellProps => <SimpleInput {...cellProps} field="trend_filename" />, size: 100 },
                 { accessorKey: 'trend_storage', header: 'Storage', cell: cellProps => <SimpleInput {...cellProps} field="trend_storage" />, size: 100 },
                 { accessorKey: 'trend_area', header: 'Area', cell: cellProps => <SimpleInput {...cellProps} field="trend_area" />, size: 60 },
