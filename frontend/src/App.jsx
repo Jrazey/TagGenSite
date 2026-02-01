@@ -7,7 +7,7 @@ import ImportDiffModal from './components/ImportDiffModal'
 import SettingsModal from './components/SettingsModal'
 import DBFPreviewModal from './components/DBFPreviewModal'
 import UDTBuilderModal from './components/UDTBuilderModal'
-import { Settings, Download, Eye, Database } from 'lucide-react'
+import { Settings, Download, Eye, Database, Moon, Sun } from 'lucide-react'
 import './index.css'
 
 function App() {
@@ -25,6 +25,17 @@ function App() {
   const [isUDTBuilderOpen, setIsUDTBuilderOpen] = useState(false);
   const [templates, setTemplates] = useState({});
   const [defaults, setDefaults] = useState(null);
+
+  // Theme state
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
+
+  // Apply theme to document
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
 
   // Ref to access tag data from TagGrid
   const gridRef = useRef();
@@ -236,6 +247,9 @@ function App() {
           </button>
           <button onClick={() => setIsSettingsOpen(true)} title="Settings">
             <Settings size={18} />
+          </button>
+          <button onClick={toggleTheme} title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
           <div style={{ width: 1, background: '#555', margin: '0 4px' }}></div>
           <button onClick={handleSave} title="Save to Database">

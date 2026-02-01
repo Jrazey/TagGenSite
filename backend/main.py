@@ -34,17 +34,13 @@ app.add_middleware(
 )
 
 # Services
-# Services
 settings_service = SettingsService()
 defaults = settings_service.get_defaults()
 scanner = ProjectScanner(root_path=defaults.get("scada_root_path"))
 sanitizer = TagSanitizer()
 dbf_writer = DBFWriter()
-udt_expander = UDTExpander()
 dbf_reader = DBFReader()
 udt_expander = UDTExpander()
-dbf_reader = DBFReader()
-# settings_service moved up
 
 # Pydantic Models for API
 class ProjectModel(BaseModel):

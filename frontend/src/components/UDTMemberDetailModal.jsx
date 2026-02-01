@@ -108,7 +108,7 @@ const UDTMemberDetailModal = ({ isOpen, member, onSave, onClose }) => {
                                     <div className="form-row cols-2">
                                         <div className="form-field">
                                             <label>Sample Period</label>
-                                            <input value={data.sample_period || '00:00:01'} onChange={e => setData({ ...data, sample_period: e.target.value })} />
+                                            <input value={data.sample_period || '1'} onChange={e => setData({ ...data, sample_period: e.target.value })} />
                                         </div>
                                         <div className="form-field">
                                             <label>Trend Type</label>

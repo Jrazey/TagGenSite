@@ -1,6 +1,6 @@
 {
   "cluster": "Cluster1",
-  "sample_period": "00:00:01",
+  "sample_period": "1",
   "trend_type": "TRN_PERIODIC",
   "trend_history": "365 weeks",
   "alarm_category": "1",

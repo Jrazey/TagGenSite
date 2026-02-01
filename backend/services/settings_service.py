@@ -9,7 +9,7 @@ class SettingsService:
     def __init__(self):
         self.defaults = {
             "cluster": "Cluster1",
-            "sample_period": "00:00:01",
+            "sample_period": "1",
             "trend_type": "TRN_PERIODIC",
             "trend_history": "365 weeks", # Not a real DBF field usually, but useful conceptual logic
             "alarm_category": "1",

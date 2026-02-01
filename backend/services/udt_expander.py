@@ -171,7 +171,7 @@ class UDTExpander:
                         "NAME": entry.get("trend_name") or entry.get("name", ""),
                         "EXPR": entry.get("trend_expr") or entry.get("name", ""),
                         "TRIG": entry.get("trend_trig", ""),
-                        "SAMPLEPER": entry.get("trend_sample_per") if is_imported else entry.get("trend_sample_per", "00:00:01"),
+                        "SAMPLEPER": entry.get("trend_sample_per") if is_imported else entry.get("trend_sample_per", "1"),
                         "PRIV": entry.get("trend_priv", ""),
                         "AREA": entry.get("trend_area", ""),
                         # For imported: use trend-specific values; else fallback to var_* 
@@ -320,7 +320,7 @@ class UDTExpander:
                         trend_rec.update({
                             "NAME": tag_name,
                             "EXPR": tag_name,
-                            "SAMPLEPER": member.get("sample_period", "00:00:01"),
+                            "SAMPLEPER": member.get("sample_period", "1"),
                             "TYPE": member.get("trend_type", "TRN_PERIODIC"),
                             "COMMENT": tag_desc,
                             "EQUIP": equip_val,

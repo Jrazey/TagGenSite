@@ -649,9 +649,10 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                             value={getValue() || row.original.var_addr || ''}
                             onChange={(val) => handlePlcAddrChange(row.index, val)}
                             style={{
-                                background: 'var(--accent-color-dim, #1a3a5c)',
-                                border: '2px solid var(--accent-color, #4a9eff)',
-                                fontWeight: 'bold'
+                                background: 'var(--accent-color-dim)',
+                                border: '2px solid var(--accent-color)',
+                                fontWeight: 'bold',
+                                color: 'var(--plc-addr-text)'
                             }}
                             placeholder="Enter PLC Address..."
                         />
@@ -750,8 +751,8 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                         }
 
                         return (
-                            <select value={getValue()} onChange={(e) => handleFieldChange(row.index, 'type', e.target.value)} style={{ background: 'transparent', border: 'none', width: '100%', color: 'white' }}>
-                                {['DIGITAL', 'INT', 'REAL', 'STRING', 'UINT', 'LONG', 'BYTE'].map(t => <option key={t} value={t} style={{ background: '#333', color: 'white' }}>{t}</option>)}
+                            <select value={getValue()} onChange={(e) => handleFieldChange(row.index, 'type', e.target.value)} style={{ background: 'transparent', border: 'none', width: '100%', color: 'var(--text-primary)' }}>
+                                {['DIGITAL', 'INT', 'REAL', 'STRING', 'UINT', 'LONG', 'BYTE'].map(t => <option key={t} value={t} style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>{t}</option>)}
                             </select>
                         );
                     },
@@ -805,13 +806,13 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                             <select
                                 value={displayValue}
                                 onChange={(e) => handleFieldChange(row.index, 'trend_type', e.target.value)}
-                                style={{ background: 'transparent', border: 'none', width: '100%', color: 'white', opacity: isTrend ? 1 : 0.5 }}
+                                style={{ background: 'transparent', border: 'none', width: '100%', color: 'var(--text-primary)', opacity: isTrend ? 1 : 0.5 }}
                                 disabled={!isTrend}
                             >
-                                <option value="" style={{ background: '#333', color: 'white' }}></option>
-                                <option value="TRN_EVENT" style={{ background: '#333', color: 'white' }}>TRN_EVENT</option>
-                                <option value="TRN_PERIODIC" style={{ background: '#333', color: 'white' }}>TRN_PERIODIC</option>
-                                <option value="TRN_PERIODIC_EVENT" style={{ background: '#333', color: 'white' }}>TRN_PERIODIC_EVENT</option>
+                                <option value="" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}></option>
+                                <option value="TRN_EVENT" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>TRN_EVENT</option>
+                                <option value="TRN_PERIODIC" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>TRN_PERIODIC</option>
+                                <option value="TRN_PERIODIC_EVENT" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>TRN_PERIODIC_EVENT</option>
                             </select>
                         );
                     },
@@ -827,12 +828,12 @@ const TagGrid = forwardRef(({ project, defaults, templates }, ref) => {
                             <select
                                 value={getValue() || row.original.trend_stormethod || ''}
                                 onChange={(e) => handleFieldChange(row.index, 'trend_storage', e.target.value)}
-                                style={{ background: 'transparent', border: 'none', color: isTrend ? 'var(--accent-color)' : '#666', width: '100%' }}
+                                style={{ background: 'transparent', border: 'none', color: isTrend ? 'var(--accent-color)' : 'var(--text-secondary)', width: '100%' }}
                                 disabled={!isTrend}
                             >
-                                <option value="" style={{ background: '#333', color: 'white' }}></option>
-                                <option value="Scaled (2-byte samples)" style={{ background: '#333', color: 'white' }}>Scaled (2-byte)</option>
-                                <option value="Floating point (8-byte samples)" style={{ background: '#333', color: 'white' }}>Floating point (8-byte)</option>
+                                <option value="" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}></option>
+                                <option value="Scaled (2-byte samples)" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>Scaled (2-byte)</option>
+                                <option value="Floating point (8-byte samples)" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>Floating point (8-byte)</option>
                             </select>
                         );
                     },
